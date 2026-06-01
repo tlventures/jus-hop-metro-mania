@@ -1,0 +1,584 @@
+{
+  "profile": {
+    "id": "user_001",
+    "name": "Metro Traveler",
+    "email": "traveler@metrosafar.in",
+    "phone": "9876543210",
+    "points": 250,
+    "membershipTier": "Silver",
+    "co2SavedKg": 75.3,
+    "treesEquivalent": 3,
+    "notificationsEnabled": true,
+    "lastUpdated": "2026-03-23T00:00:00.000Z"
+  },
+  "quickBookings": [
+    {
+      "start": "Miyapur",
+      "end": "LB Nagar",
+      "line": "Red Line",
+      "time": "25 mins"
+    },
+    {
+      "start": "Nagole",
+      "end": "Raidurg",
+      "line": "Blue Line",
+      "time": "30 mins"
+    },
+    {
+      "start": "JBS Parade Ground",
+      "end": "MG Bus Station",
+      "line": "Green Line",
+      "time": "15 mins"
+    }
+  ],
+  "games": [
+    {
+      "id": "daily_spin",
+      "title": "Daily Spin",
+      "description": "Spin the wheel for instant rewards and bonus points.",
+      "points": 20,
+      "route": "/spin-game",
+      "durationMinutes": 1,
+      "commuteLengthLabel": "1-min ride",
+      "difficulty": "easy",
+      "icon": "\ud83c\udfb0"
+    },
+    {
+      "id": "trivia",
+      "title": "Metro Trivia",
+      "description": "Answer Hyderabad Metro questions and test your network knowledge.",
+      "points": 50,
+      "route": "/trivia-game",
+      "durationMinutes": 5,
+      "commuteLengthLabel": "5-min ride",
+      "difficulty": "medium",
+      "icon": "\ud83e\udde0"
+    },
+    {
+      "id": "sudoku",
+      "title": "Sudoku",
+      "description": "Solve number puzzles during your ride.",
+      "points": 60,
+      "route": "/sudoku-game",
+      "durationMinutes": 10,
+      "commuteLengthLabel": "10-min ride",
+      "difficulty": "hard",
+      "icon": "\ud83d\udd22"
+    },
+    {
+      "id": "word_puzzle",
+      "title": "Word Puzzle",
+      "description": "Unscramble station names for a quick commuter brain break.",
+      "points": 30,
+      "route": "/puzzle-game",
+      "durationMinutes": 3,
+      "commuteLengthLabel": "3-min ride",
+      "difficulty": "easy",
+      "icon": "\ud83d\udcdd"
+    },
+    {
+      "id": "city_explorer",
+      "title": "City Explorer",
+      "description": "Track landmarks and badges near metro stations.",
+      "points": 100,
+      "route": "/explorer-game",
+      "durationMinutes": 15,
+      "commuteLengthLabel": "15-min ride",
+      "difficulty": "medium",
+      "icon": "\ud83d\uddfa\ufe0f"
+    }
+  ],
+  "videos": [
+    {
+      "id": "video1",
+      "title": "Hyderabad Metro Safety Guidelines",
+      "duration": "2:30",
+      "points": 20,
+      "description": "Safety best practices before you board.",
+      "watched": false
+    },
+    {
+      "id": "video2",
+      "title": "Station Access and Safety Basics",
+      "duration": "1:45",
+      "points": 15,
+      "description": "How to navigate platforms, boarding etiquette, and station assistance points.",
+      "watched": false
+    },
+    {
+      "id": "video3",
+      "title": "Explore Hyderabad by Metro",
+      "duration": "3:20",
+      "points": 25,
+      "description": "Popular destinations and suggested routes.",
+      "watched": false
+    }
+  ],
+  "rewards": [
+    {
+      "id": "food_cafe",
+      "title": "Cafe Coupon",
+      "discount": "₹50 off",
+      "points": 150,
+      "category": "Food",
+      "description": "₹50 off at partner cafes inside metro stations.",
+      "redeemed": false
+    },
+    {
+      "id": "food_meal",
+      "title": "Meal Combo",
+      "discount": "20% off",
+      "points": 200,
+      "category": "Food",
+      "description": "20% off on meal combos at food courts across metro hubs.",
+      "redeemed": false
+    },
+    {
+      "id": "food_coffee",
+      "title": "Free Coffee",
+      "discount": "1 Free",
+      "points": 120,
+      "category": "Food",
+      "description": "One free coffee at participating outlets near metro exits.",
+      "redeemed": false
+    },
+    {
+      "id": "food_juice",
+      "title": "Fresh Juice Bar",
+      "discount": "₹30 off",
+      "points": 100,
+      "category": "Food",
+      "description": "₹30 off on any juice at station kiosks.",
+      "redeemed": false
+    },
+    {
+      "id": "shop_merch",
+      "title": "Metro Merchandise",
+      "discount": "10% off",
+      "points": 100,
+      "category": "Shopping",
+      "description": "10% off on official Hyderabad Metro merchandise.",
+      "redeemed": false
+    },
+    {
+      "id": "shop_books",
+      "title": "Station Bookstore",
+      "discount": "₹50 off",
+      "points": 80,
+      "category": "Shopping",
+      "description": "₹50 off on any purchase at metro station bookstores.",
+      "redeemed": false
+    },
+    {
+      "id": "shop_grocery",
+      "title": "Grocery 15% Off",
+      "discount": "15% off",
+      "points": 180,
+      "category": "Shopping",
+      "description": "15% off at partner grocery stores near select stations.",
+      "redeemed": false
+    },
+    {
+      "id": "shop_apparel",
+      "title": "Apparel Discount",
+      "discount": "10% off",
+      "points": 150,
+      "category": "Shopping",
+      "description": "10% off at partner clothing outlets near metro stations.",
+      "redeemed": false
+    },
+    {
+      "id": "travel_bus",
+      "title": "Bus Day Pass",
+      "discount": "1 Day Pass",
+      "points": 200,
+      "category": "Travel",
+      "description": "One day unlimited TSRTC bus pass within city limits.",
+      "redeemed": false
+    },
+    {
+      "id": "travel_cab",
+      "title": "Cab Discount",
+      "discount": "₹40 off",
+      "points": 150,
+      "category": "Travel",
+      "description": "₹40 off on cab rides from partnered metro exits.",
+      "redeemed": false
+    },
+    {
+      "id": "travel_auto",
+      "title": "Auto Cashback",
+      "discount": "₹20 cashback",
+      "points": 100,
+      "category": "Travel",
+      "description": "₹20 cashback on auto rides booked via partner apps.",
+      "redeemed": false
+    },
+    {
+      "id": "travel_lounge",
+      "title": "Premium Lounge",
+      "discount": "1 Visit",
+      "points": 400,
+      "category": "Travel",
+      "description": "One-time lounge access at select metro stations.",
+      "redeemed": false
+    },
+    {
+      "id": "exp_movie",
+      "title": "Movie Ticket",
+      "discount": "1 Free",
+      "points": 500,
+      "category": "Experiences",
+      "description": "One free movie ticket at partnered cinemas near metro stations.",
+      "redeemed": false
+    },
+    {
+      "id": "exp_museum",
+      "title": "Museum Entry",
+      "discount": "Free Entry",
+      "points": 300,
+      "category": "Experiences",
+      "description": "Free entry to Salar Jung Museum or Birla Science Museum.",
+      "redeemed": false
+    },
+    {
+      "id": "exp_spa",
+      "title": "Spa & Wellness",
+      "discount": "20% off",
+      "points": 400,
+      "category": "Experiences",
+      "description": "20% off at wellness centers near HITEC City and Gachibowli stations.",
+      "redeemed": false
+    },
+    {
+      "id": "exp_workshop",
+      "title": "Craft Workshop",
+      "discount": "Free Entry",
+      "points": 250,
+      "category": "Experiences",
+      "description": "Free entry to weekend craft and cultural workshops at Shilparamam.",
+      "redeemed": false
+    }
+  ],
+  "explorerLandmarks": [
+    {
+      "id": "landmark1",
+      "name": "Shilparamam",
+      "station": "HITEC City",
+      "line": "Blue Line",
+      "badge": "Culture Scout",
+      "description": "A cultural village showcasing crafts, performances, and local food.",
+      "visited": false
+    },
+    {
+      "id": "landmark2",
+      "name": "Birla Mandir",
+      "station": "Lakdikapul",
+      "line": "Red Line",
+      "badge": "City View",
+      "description": "A hilltop temple with panoramic views of Hyderabad.",
+      "visited": false
+    },
+    {
+      "id": "landmark3",
+      "name": "Salar Jung Museum",
+      "station": "MG Bus Station",
+      "line": "Red & Green Line",
+      "badge": "Museum Hopper",
+      "description": "One of India\u2019s largest art museums, close to the old city.",
+      "visited": false
+    }
+  ],
+  "legal": {
+    "privacyPolicy": {
+      "title": "Privacy Policy",
+      "updatedAt": "2026-03-23",
+      "sections": [
+        {
+          "heading": "What We Collect",
+          "body": "MetroSafar collects profile details you provide, reward activity, support requests, limited device identifiers used to keep your in-app data separate, and foreground location only when you ask for nearby station suggestions."
+        },
+        {
+          "heading": "How We Use Data",
+          "body": "We use personal data to maintain your profile, power rewards, respond to support requests, personalize station suggestions, and improve app reliability and safety. We do not sell your personal data."
+        },
+        {
+          "heading": "Location Data",
+          "body": "Location is used only when you request nearby stations, directions, or route suggestions. Background location is not collected in this version of the app."
+        },
+        {
+          "heading": "Retention and Security",
+          "body": "We retain data for service delivery, abuse prevention, and support history. Production service data is intended to be protected in transit and at rest using managed cloud infrastructure."
+        },
+        {
+          "heading": "Your Choices",
+          "body": "You can update your profile, disable notifications, and request support for account or privacy concerns using the in-app support section."
+        }
+      ]
+    },
+    "terms": {
+      "title": "Terms and Conditions",
+      "updatedAt": "2026-03-23",
+      "sections": [
+        {
+          "heading": "Use of Service",
+          "body": "MetroSafar provides commuter information, nearby station discovery, rewards content, support access, and in-app games. Users must provide accurate information and use the app lawfully."
+        },
+        {
+          "heading": "Rewards",
+          "body": "Reward points, badges, and promotional benefits may be changed, paused, or withdrawn at our discretion. Fraudulent activity may result in forfeiture."
+        },
+        {
+          "heading": "Availability",
+          "body": "We aim to keep MetroSafar available and accurate, but service interruptions, route changes, and partner limitations may occur."
+        },
+        {
+          "heading": "Support and Escalation",
+          "body": "Users can contact support from within the app for rewards, account, privacy, and general app-related questions."
+        }
+      ]
+    }
+  },
+  "support": {
+    "email": "support@metrosafar.in",
+    "phone": "+91 40 2322 5129",
+    "officeHours": "Daily, 6:00 AM - 10:30 PM IST",
+    "responseTime": "Within 24 hours for in-app support requests",
+    "faqs": [
+      {
+        "question": "What can I do in this version of MetroSafar?",
+        "answer": "This release focuses on nearby station discovery, rewards videos, commuter games, eco impact summaries, profile settings, and support information."
+      },
+      {
+        "question": "Do rewards expire?",
+        "answer": "Rewards may expire according to campaign rules. Check the reward description before redeeming."
+      },
+      {
+        "question": "Why does the app ask for location?",
+        "answer": "Location is used to suggest nearby stations and calculate directions when you request those features."
+      }
+    ],
+    "disclosures": [
+      {
+        "title": "Location Disclosure",
+        "body": "MetroSafar uses foreground location only when you request nearby stations or directions. No continuous background location collection is implemented."
+      },
+      {
+        "title": "Notification Disclosure",
+        "body": "Notifications may be used for service updates, reward confirmations, and important account-related messages. Users should be able to disable them from device settings."
+      },
+      {
+        "title": "Analytics Disclosure",
+        "body": "No analytics SDK is integrated in this codebase at present. If analytics is added later, the disclosure and privacy policy must be updated before release."
+      }
+    ]
+  },
+  "tickets": [
+    {
+      "id": "TKT240001",
+      "fromStation": "Miyapur",
+      "toStation": "Ameerpet",
+      "date": "24/3/2026",
+      "time": "09:15",
+      "adultCount": 1,
+      "childCount": 0,
+      "fare": 30,
+      "status": "Confirmed",
+      "qrCode": null
+    },
+    {
+      "id": "TKT318617",
+      "fromStation": "Miyapur",
+      "toStation": "Ameerpet",
+      "date": "24/3/2026",
+      "time": "09:00",
+      "adultCount": 1,
+      "childCount": 0,
+      "fare": 30,
+      "status": "Confirmed",
+      "qrCode": "eyJpZCI6IlRLVDMxODYxNyIsImZyb20iOiJNaXlhcHVyIiwidG8iOiJBbWVlcnBldCIsImRhdGUiOiIyNC8zLzIwMjYiLCJ0aW1lIjoiMDk6MDAiLCJ0aW1lc3RhbXAiOjE3NzQyMzkzMTg2MTh9"
+    }
+  ],
+  "articles": [
+    {
+      "id": "article_1",
+      "title": "Hyderabad Metro Safety Tips",
+      "body": "Learn essential safety practices for commuting safely on Hyderabad Metro. This comprehensive guide covers platform safety, boarding procedures, emergency contacts, and accessibility features.",
+      "coverUrl": "\ud83d\ude87",
+      "readTimeMinutes": 5,
+      "points": 15,
+      "publishedAt": "2026-03-15T10:00:00Z"
+    },
+    {
+      "id": "article_2",
+      "title": "Sustainable Commuting Benefits",
+      "body": "Discover how using public transport contributes to environmental conservation. Every metro ride saves CO2 emissions and helps reduce traffic congestion in Hyderabad.",
+      "coverUrl": "\ud83c\udf31",
+      "readTimeMinutes": 4,
+      "points": 12,
+      "publishedAt": "2026-03-18T14:30:00Z"
+    },
+    {
+      "id": "article_3",
+      "title": "Exploring Hyderabad's History",
+      "body": "Discover the rich historical heritage of Hyderabad through its landmarks, architecture, and culture. From the iconic Charminar to historic forts, learn about the city's fascinating past.",
+      "coverUrl": "\ud83c\udfdb\ufe0f",
+      "readTimeMinutes": 7,
+      "points": 18,
+      "publishedAt": "2026-03-10T09:00:00Z"
+    },
+    {
+      "id": "article_4",
+      "title": "Metro Etiquette & Community",
+      "body": "Being a responsible commuter helps create a better experience for everyone. Learn about platform etiquette, respecting fellow passengers, and contributing to a positive metro community.",
+      "coverUrl": "\ud83d\udc65",
+      "readTimeMinutes": 3,
+      "points": 10,
+      "publishedAt": "2026-03-20T16:45:00Z"
+    },
+    {
+      "id": "article_5",
+      "title": "Tech Tips for Metro Commuters",
+      "body": "Maximize your metro journey with technology. Learn about navigation apps, ticketing options, real-time updates, and how to use MetroSafar features to enhance your commute.",
+      "coverUrl": "\ud83d\udcf1",
+      "readTimeMinutes": 6,
+      "points": 14,
+      "publishedAt": "2026-03-12T11:20:00Z"
+    }
+  ],
+  "surveys": [
+    {
+      "id": "survey_1",
+      "question": "How often do you use Hyderabad Metro?",
+      "options": [
+        "Daily",
+        "3-4 times a week",
+        "Once a week",
+        "Occasionally"
+      ],
+      "points": 20
+    },
+    {
+      "id": "survey_2",
+      "question": "What's your favorite feature in MetroSafar?",
+      "options": [
+        "Games",
+        "Rewards",
+        "Articles",
+        "Community info"
+      ],
+      "points": 25
+    },
+    {
+      "id": "survey_3",
+      "question": "Which metro line do you use most?",
+      "options": [
+        "Red Line",
+        "Blue Line",
+        "Green Line",
+        "Purple Line"
+      ],
+      "points": 20
+    },
+    {
+      "id": "survey_4",
+      "question": "What time of day do you commute most?",
+      "options": [
+        "Morning (6-9 AM)",
+        "Afternoon (12-3 PM)",
+        "Evening (5-8 PM)",
+        "Night/Varies"
+      ],
+      "points": 15
+    }
+  ],
+  "stories": [
+    {
+      "id": "story_1",
+      "stationName": "Charminar",
+      "description": "The iconic gateway of Hyderabad, a symbol of culture and commerce",
+      "imageUrl": "\ud83d\udd4c",
+      "frames": [
+        {
+          "id": "frame_1_1",
+          "title": "Welcome to Charminar",
+          "content": "Charminar, built in 1591, is one of the most recognizable structures in India. It was constructed by Muhammad Quli Qutb Shah, the fifth ruler of the Qutb Shahi dynasty.",
+          "imageUrl": "\ud83d\udd4c",
+          "order": 1
+        },
+        {
+          "id": "frame_1_2",
+          "title": "Architectural Marvel",
+          "content": "Standing at 56 meters tall, this Indo-Islamic monument features intricate latticed windows, arches, and minarets that showcase remarkable architectural craftsmanship.",
+          "imageUrl": "\ud83c\udfd7\ufe0f",
+          "order": 2
+        },
+        {
+          "id": "frame_1_3",
+          "title": "Cultural Hub",
+          "content": "Surrounding Charminar is the bustling market area where traditional crafts, textiles, and jewelry are sold. It remains the heart of old Hyderabad's commerce.",
+          "imageUrl": "\ud83d\udecd\ufe0f",
+          "order": 3
+        }
+      ]
+    },
+    {
+      "id": "story_2",
+      "stationName": "Golconda Fort",
+      "description": "A grand fortress showcasing the architectural brilliance of the Qutb Shahi era",
+      "imageUrl": "\ud83c\udff0",
+      "frames": [
+        {
+          "id": "frame_2_1",
+          "title": "Golconda Fort",
+          "content": "Perched on a granite hill, Golconda Fort served as the capital of the Qutb Shahi dynasty. Its strategic location provided excellent defense and panoramic views of the city.",
+          "imageUrl": "\ud83c\udff0",
+          "order": 1
+        },
+        {
+          "id": "frame_2_2",
+          "title": "Diamond Trade History",
+          "content": "Golconda was once the center of the global diamond trade. Famous diamonds like the Hope Diamond and Koh-i-Noor were sourced from mines near Golconda.",
+          "imageUrl": "\ud83d\udc8e",
+          "order": 2
+        },
+        {
+          "id": "frame_2_3",
+          "title": "Architecture & Acoustics",
+          "content": "The fort features amazing acoustic engineering. A handclap at one point can be heard at another distant location, demonstrating ancient Indian engineering brilliance.",
+          "imageUrl": "\ud83d\udd0a",
+          "order": 3
+        }
+      ]
+    },
+    {
+      "id": "story_3",
+      "stationName": "Hussain Sagar Lake",
+      "description": "A serene water body offering respite and recreation for city residents",
+      "imageUrl": "\ud83d\udca7",
+      "frames": [
+        {
+          "id": "frame_3_1",
+          "title": "Hussain Sagar Lake",
+          "content": "Created in 1562 by Ibrahim Quli Qutb Shah, this artificial lake is one of the oldest man-made lakes in India. It spans an area of 1,854 acres.",
+          "imageUrl": "\ud83d\udca7",
+          "order": 1
+        },
+        {
+          "id": "frame_3_2",
+          "title": "The Buddha Statue",
+          "content": "A 16-meter tall granite Buddha statue stands on an island in the center of the lake. Inaugurated in 1992, it has become an iconic symbol of Hyderabad.",
+          "imageUrl": "\ud83e\uddd8",
+          "order": 2
+        },
+        {
+          "id": "frame_3_3",
+          "title": "Recreation & Conservation",
+          "content": "The lake is a popular spot for boating, walking, and nature watching. Recent conservation efforts have improved water quality and restored the ecosystem.",
+          "imageUrl": "\ud83d\udea3",
+          "order": 3
+        }
+      ]
+    }
+  ]
+}

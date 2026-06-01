@@ -1,0 +1,4 @@
+storePassword=<your-keystore-password>
+keyPassword=<your-key-password>
+keyAlias=metrosafar
+storeFile=<path-to-your-keystore.jks>

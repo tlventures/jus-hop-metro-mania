@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ──────────────────────────────────────────────────
+
+    // Is the requester authenticated?
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Is the requester the owner of this document?
+    function isOwner(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    // Does the token carry the given admin role?
+    function hasRole(role) {
+      return isAuthed()
+        && request.auth.token.role == role;
+    }
+
+    function isSuperAdmin() {
+      return hasRole('superadmin');
+    }
+
+    function isAdmin() {
+      return isAuthed()
+        && request.auth.token.role in ['superadmin', 'city_admin', 'content_editor', 'analyst', 'support'];
+    }
+
+    // ─── Public / city data ────────────────────────────────────────────────
+
+    // Cities are read-only for all authenticated users; write only via backend
+    match /cities/{cityId} {
+      allow read: if isAuthed();
+      allow write: if isSuperAdmin();
+
+      // Stations nested under city
+      match /stations/{stationId} {
+        allow read: if isAuthed();
+        allow write: if isSuperAdmin();
+      }
+
+      // Content packs (quiz, tips, etc.) — read-only for authenticated users
+      match /content/{type} {
+        allow read: if isAuthed();
+        allow write: if isSuperAdmin();
+      }
+    }
+
+    // ─── User profiles ─────────────────────────────────────────────────────
+
+    match /users/{uid} {
+      // Users can only read/write their own profile
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+      // Users can update their own profile; only admins can update others
+      allow update: if isOwner(uid) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─── Telemetry ─────────────────────────────────────────────────────────
+
+    match /telemetry/{eventId} {
+      // Client can write its own events (uid field must match auth.uid)
+      allow create: if isAuthed()
+        && request.resource.data.uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false; // immutable
+    }
+
+    // ─── Feature flags ─────────────────────────────────────────────────────
+
+    match /feature_flags/{key} {
+      allow read: if isAuthed();
+      allow write: if isSuperAdmin();
+    }
+
+    // ─── Waitlist ──────────────────────────────────────────────────────────
+
+    match /waitlist/{entryId} {
+      // Anyone (even unauthenticated) can join the waitlist
+      allow create: if true;
+      allow read: if isAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ─── Audit log ─────────────────────────────────────────────────────────
+
+    match /audit_log/{entryId} {
+      // Written only by backend service account; readable by admins
+      allow read: if isAdmin();
+      allow write: if false; // backend writes via Admin SDK (bypasses rules)
+    }
+
+    // ─── Leaderboard ───────────────────────────────────────────────────────
+
+    match /leaderboard/{cityId}/weeks/{weekKey}/scores/{uid} {
+      allow read: if isAuthed();
+      allow write: if isOwner(uid);
+    }
+
+    // ─── Referrals ─────────────────────────────────────────────────────────
+
+    match /referrals/{code} {
+      allow read: if isAuthed();
+      // Only backend can create/update referral records
+      allow write: if false;
+    }
+
+    // ─── Push notification topics ──────────────────────────────────────────
+
+    match /notification_log/{msgId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ─── Catch-all: deny everything else ───────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

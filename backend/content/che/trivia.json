@@ -1,0 +1,91 @@
+{
+  "cityId": "che",
+  "defaultLocale": "ta",
+  "categories": [
+    {
+      "id": "metro",
+      "name": { "en": "Chennai Metro", "ta": "சென்னை மெட்ரோ" },
+      "questions": [
+        {
+          "id": "che_metro_001",
+          "question": { "en": "In which year did Chennai Metro begin operations?", "ta": "சென்னை மெட்ரோ எந்த ஆண்டில் தொடங்கப்பட்டது?" },
+          "options": { "en": ["2012", "2015", "2017", "2019"] },
+          "correctIndex": 1,
+          "explanation": { "en": "CMRL opened the Alandur–Koyambedu stretch on 29 June 2015." }
+        },
+        {
+          "id": "che_metro_002",
+          "question": { "en": "Which is the interchange between Blue and Green Lines?", "ta": "நீல மற்றும் பச்சை வழிகளுக்கு இடையே இடைமாற்ற நிலையம் எது?" },
+          "options": { "en": ["Chennai Central", "Alandur", "Egmore", "Koyambedu"] },
+          "correctIndex": 1
+        },
+        {
+          "id": "che_metro_003",
+          "question": { "en": "Chennai Metro is operated by which corporation?", "ta": "சென்னை மெட்ரோவை எந்த நிறுவனம் இயக்குகிறது?" },
+          "options": { "en": ["CMRL", "MTC", "TNSTC", "SRL"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "name": { "en": "Chennai Heritage", "ta": "சென்னை வரலாறு" },
+      "questions": [
+        {
+          "id": "che_hist_001",
+          "question": { "en": "Fort St. George was built by which colonial power?", "ta": "செயின்ட் ஜார்ஜ் கோட்டையை எந்த காலனித்துவ சக்தி கட்டியது?" },
+          "options": { "en": ["British East India Company", "French", "Portuguese", "Dutch"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "che_hist_002",
+          "question": { "en": "Kapaleeshwarar Temple is dedicated to which deity?", "ta": "கபாலீஸ்வரர் கோயில் எந்த தெய்வத்திற்கு அர்ப்பணிக்கப்பட்டது?" },
+          "options": { "en": ["Lord Shiva", "Lord Vishnu", "Lord Murugan", "Goddess Parvati"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "che_hist_003",
+          "question": { "en": "What does the name 'Madras' (old Chennai) derive from?", "ta": "'மதராஸ்' என்ற பெயர் எதிலிருந்து வந்தது?" },
+          "options": { "en": ["Madraspatnam village", "Madras curry", "Madras silk", "A Portuguese name"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "food",
+      "name": { "en": "Chennai Cuisine", "ta": "சென்னை சமையல்" },
+      "questions": [
+        {
+          "id": "che_food_001",
+          "question": { "en": "Which restaurant chain originated in Chennai and is famous for South Indian vegetarian food?", "ta": "தென்னிந்திய சைவ உணவுக்காக சென்னையில் தோன்றிய உணவகச் சங்கிலி எது?" },
+          "options": { "en": ["Saravana Bhavan", "Anjappar", "Adyar Ananda Bhavan", "All of these"] },
+          "correctIndex": 3
+        },
+        {
+          "id": "che_food_002",
+          "question": { "en": "Filter kaapi is traditionally served in which vessel?", "ta": "வடிகட்டிய காப்பி பாரம்பரியமாக எந்தப் பாத்திரத்தில் வழங்கப்படுகிறது?" },
+          "options": { "en": ["Davara-Tumbler", "Glass cup", "Ceramic mug", "Steel jar"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "landmarks",
+      "name": { "en": "Chennai Landmarks", "ta": "சென்னை சின்னங்கள்" },
+      "questions": [
+        {
+          "id": "che_lm_001",
+          "question": { "en": "Marina Beach is the longest natural urban beach in which continent?", "ta": "மெரினா கடற்கரை எந்தக் கண்டத்தின் நீளமான இயற்கை நகர்ப்புற கடற்கரை?" },
+          "options": { "en": ["Asia", "Africa", "Europe", "South America"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "che_lm_002",
+          "question": { "en": "Valluvar Kottam honors which Tamil poet-saint?", "ta": "வள்ளுவர் கோட்டம் எந்தத் தமிழ்க் கவிஞரை கௌரவிக்கிறது?" },
+          "options": { "en": ["Thiruvalluvar", "Bharathiyar", "Kambar", "Avvaiyar"] },
+          "correctIndex": 0
+        }
+      ]
+    }
+  ]
+}

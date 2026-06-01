@@ -1,0 +1,47 @@
+{
+  "id": "hyd",
+  "name": { "en": "Hyderabad", "te": "హైదరాబాద్", "hi": "हैदराबाद", "ur": "حیدرآباد" },
+  "operator": { "id": "hmrl", "name": "Hyderabad Metro Rail", "shortName": "HMR" },
+  "country": "IN",
+  "timezone": "Asia/Kolkata",
+  "bbox": { "minLat": 17.2, "maxLat": 17.7, "minLng": 78.2, "maxLng": 78.8 },
+  "center": { "lat": 17.385, "lng": 78.4867 },
+  "primaryLocales": ["te", "ur", "hi", "en"],
+  "defaultLocale": "te",
+  "lines": [
+    { "id": "red",   "name": { "en": "Red Line",   "te": "ఎరుపు రేఖ"   }, "color": "#E1252B" },
+    { "id": "blue",  "name": { "en": "Blue Line",  "te": "నీలి రేఖ"    }, "color": "#005DAA" },
+    { "id": "green", "name": { "en": "Green Line", "te": "ఆకుపచ్చ రేఖ" }, "color": "#0E8345" }
+  ],
+  "currency": "INR",
+  "fareGrammar": { "minFare": 10, "maxFare": 65, "smartCardDiscountPct": 10 },
+  "brand": {
+    "primary": "#7A1F2B",
+    "accent": "#F5C518",
+    "surfaceVariant": "#FFF5E0",
+    "skylineAsset": "skyline_hyd",
+    "iconStamp": "stamp_charminar"
+  },
+  "greetings": {
+    "morning": { "te": "శుభోదయం", "hi": "सुप्रभात", "ur": "صبح بخیر", "en": "Good morning" },
+    "afternoon": { "te": "శుభ మధ్యాహ్నం", "hi": "शुभ दोपहर", "ur": "دوپہر بخیر", "en": "Good afternoon" },
+    "evening": { "te": "శుభ సాయంత్రం", "hi": "शुभ संध्या", "ur": "شام بخیر", "en": "Good evening" }
+  },
+  "phrases": {
+    "rideComplete": { "te": "ప్రయాణం పూర్తయింది!", "hi": "यात्रा पूरी हुई!", "en": "Ride complete!" },
+    "streakCheer":  { "te": "శభాష్!", "hi": "शाबाश!", "ur": "شاباش!", "en": "Brilliant!" },
+    "loadingLine":  { "en": "Charminar se HITEC tak…", "te": "చార్మినార్ నుండి హైటెక్ వరకు…" }
+  },
+  "festivalWindows": [
+    { "id": "bonalu",   "startMMDD": "07-14", "endMMDD": "08-12", "themeId": "bonalu_hyd" },
+    { "id": "ganesh",   "startMMDD": "08-22", "endMMDD": "09-12", "themeId": "ganesh_hyd" },
+    { "id": "bathukamma","startMMDD": "10-01", "endMMDD": "10-10", "themeId": "bathukamma_hyd" }
+  ],
+  "signature": {
+    "food": ["Irani chai", "Biryani", "Osmania biscuits", "Haleem"],
+    "landmarks": ["Charminar", "Golconda Fort", "Hussain Sagar", "Chowmahalla Palace"],
+    "identity": "City of Pearls"
+  },
+  "status": "live",
+  "version": 1
+}

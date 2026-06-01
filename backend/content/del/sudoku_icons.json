@@ -1,0 +1,17 @@
+{
+  "cityId": "del",
+  "title": { "en": "Delhi Sudoku", "hi": "दिल्ली सुडोकू" },
+  "subtitle": { "en": "From Qutub to kulfi — fill the grid with Delhi icons.", "hi": "क़ुतुब से कुल्फी तक — दिल्ली के चिह्नों से ग्रिड भरें।" },
+  "icons": ["🗼", "🪷", "🏯", "🛍", "🍦", "🍞", "🐘", "🚇", "🌶"],
+  "iconLabels": {
+    "🗼": "Qutub Minar",
+    "🪷": "Lotus Temple",
+    "🏯": "Red Fort",
+    "🛍": "Connaught Place",
+    "🍦": "Kulfi",
+    "🍞": "Chole bhature",
+    "🐘": "Mughal heritage",
+    "🚇": "Metro",
+    "🌶": "Delhi street food"
+  }
+}

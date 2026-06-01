@@ -1,0 +1,46 @@
+{
+  "id": "che",
+  "name": { "en": "Chennai", "ta": "சென்னை", "hi": "चेन्नई" },
+  "operator": { "id": "cmrl", "name": "Chennai Metro Rail Limited", "shortName": "CMRL" },
+  "country": "IN",
+  "timezone": "Asia/Kolkata",
+  "bbox": { "minLat": 12.85, "maxLat": 13.25, "minLng": 80.05, "maxLng": 80.35 },
+  "center": { "lat": 13.0827, "lng": 80.2707 },
+  "primaryLocales": ["ta", "en", "hi"],
+  "defaultLocale": "ta",
+  "lines": [
+    { "id": "blue",  "name": { "en": "Blue Line",  "ta": "நீல வழி"  }, "color": "#2563EB" },
+    { "id": "green", "name": { "en": "Green Line", "ta": "பச்சை வழி"}, "color": "#16A34A" }
+  ],
+  "currency": "INR",
+  "fareGrammar": { "minFare": 10, "maxFare": 70, "smartCardDiscountPct": 10 },
+  "brand": {
+    "primary": "#1E40AF",
+    "accent": "#F97316",
+    "surfaceVariant": "#EFF6FF",
+    "skylineAsset": "skyline_che",
+    "iconStamp": "stamp_marina_beach"
+  },
+  "greetings": {
+    "morning":   { "ta": "காலை வணக்கம்",   "hi": "सुप्रभात",  "en": "Good morning"   },
+    "afternoon": { "ta": "மதிய வணக்கம்",   "hi": "शुभ दोपहर", "en": "Good afternoon" },
+    "evening":   { "ta": "மாலை வணக்கம்",   "hi": "शुभ संध्या", "en": "Good evening"   }
+  },
+  "phrases": {
+    "rideComplete": { "ta": "பயணம் முடிந்தது!", "hi": "यात्रा पूरी हुई!", "en": "Ride complete!" },
+    "streakCheer":  { "ta": "செம்மை!", "hi": "वाह!", "en": "Semma!" },
+    "loadingLine":  { "en": "Alandur se Airport tak…", "ta": "அலந்தூரிலிருந்து விமான நிலையம் வரை…" }
+  },
+  "festivalWindows": [
+    { "id": "pongal",    "startMMDD": "01-13", "endMMDD": "01-16", "themeId": "pongal_che"    },
+    { "id": "navratri",  "startMMDD": "10-01", "endMMDD": "10-10", "themeId": "navratri_che"  },
+    { "id": "margazhi",  "startMMDD": "12-15", "endMMDD": "01-13", "themeId": "margazhi_che"  }
+  ],
+  "signature": {
+    "food": ["Filter kaapi", "Idli sambar", "Chettinad chicken", "Sundal", "Pongal"],
+    "landmarks": ["Marina Beach", "Kapaleeshwarar Temple", "Fort St. George", "Valluvar Kottam", "Mahabalipuram"],
+    "identity": "Gateway of South India"
+  },
+  "status": "beta",
+  "version": 1
+}

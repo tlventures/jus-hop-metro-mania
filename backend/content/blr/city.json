@@ -1,0 +1,48 @@
+{
+  "id": "blr",
+  "name": { "en": "Bangalore", "kn": "ಬೆಂಗಳೂರು", "hi": "बेंगलुरु" },
+  "operator": { "id": "bmrcl", "name": "Bangalore Metro Rail Corporation", "shortName": "Namma Metro" },
+  "country": "IN",
+  "timezone": "Asia/Kolkata",
+  "bbox": { "minLat": 12.80, "maxLat": 13.20, "minLng": 77.40, "maxLng": 77.80 },
+  "center": { "lat": 12.9716, "lng": 77.5946 },
+  "primaryLocales": ["kn", "en", "hi"],
+  "defaultLocale": "kn",
+  "lines": [
+    { "id": "purple", "name": { "en": "Purple Line", "kn": "ನೇರಳೆ ಮಾರ್ಗ" }, "color": "#7C3AED" },
+    { "id": "green",  "name": { "en": "Green Line",  "kn": "ಹಸಿರು ಮಾರ್ಗ"  }, "color": "#16A34A" },
+    { "id": "yellow", "name": { "en": "Yellow Line", "kn": "ಹಳದಿ ಮಾರ್ಗ"  }, "color": "#D97706" },
+    { "id": "pink",   "name": { "en": "Pink Line",   "kn": "ಗುಲಾಬಿ ಮಾರ್ಗ" },"color": "#DB2777" }
+  ],
+  "currency": "INR",
+  "fareGrammar": { "minFare": 10, "maxFare": 60, "smartCardDiscountPct": 10 },
+  "brand": {
+    "primary": "#5B21B6",
+    "accent": "#34D399",
+    "surfaceVariant": "#F5F3FF",
+    "skylineAsset": "skyline_blr",
+    "iconStamp": "stamp_vidhana_soudha"
+  },
+  "greetings": {
+    "morning":   { "kn": "ಶುಭೋದಯ",        "hi": "सुप्रभात",  "en": "Good morning"   },
+    "afternoon": { "kn": "ಶುಭ ಮಧ್ಯಾಹ್ನ", "hi": "शुभ दोपहर", "en": "Good afternoon" },
+    "evening":   { "kn": "ಶುಭ ಸಂಜೆ",      "hi": "शुभ संध्या", "en": "Good evening"   }
+  },
+  "phrases": {
+    "rideComplete": { "kn": "ಪ್ರಯಾಣ ಮುಗಿಯಿತು!", "hi": "यात्रा पूरी हुई!", "en": "Ride complete!" },
+    "streakCheer":  { "kn": "ಭಲೇ!", "hi": "वाह!", "en": "Superb!" },
+    "loadingLine":  { "en": "Majestic se Whitefield tak…", "kn": "ಮೆಜೆಸ್ಟಿಕ್‌ನಿಂದ ವ್ಹೈಟ್‌ಫೀಲ್ಡ್‌ವರೆಗೆ…" }
+  },
+  "festivalWindows": [
+    { "id": "dasara",  "startMMDD": "10-01", "endMMDD": "10-15", "themeId": "dasara_blr"  },
+    { "id": "ugadi",   "startMMDD": "03-20", "endMMDD": "04-01", "themeId": "ugadi_blr"   },
+    { "id": "karaga",  "startMMDD": "04-05", "endMMDD": "04-07", "themeId": "karaga_blr"  }
+  ],
+  "signature": {
+    "food": ["Filter coffee", "Masala dosa", "Mysore pak", "Bisi bele bath", "Mangalore buns"],
+    "landmarks": ["Vidhana Soudha", "Cubbon Park", "Lalbagh", "ISKCON Temple", "Nandi Hills"],
+    "identity": "Garden City of India"
+  },
+  "status": "beta",
+  "version": 1
+}

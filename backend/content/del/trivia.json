@@ -1,0 +1,97 @@
+{
+  "cityId": "del",
+  "defaultLocale": "hi",
+  "categories": [
+    {
+      "id": "metro",
+      "name": { "en": "Metro Trivia", "hi": "मेट्रो ट्रिविया" },
+      "questions": [
+        {
+          "id": "del_metro_001",
+          "question": { "en": "In which year did Delhi Metro begin operations?", "hi": "दिल्ली मेट्रो ने किस वर्ष परिचालन शुरू किया?" },
+          "options": { "en": ["1995", "2002", "2008", "2010"] },
+          "correctIndex": 1,
+          "explanation": { "en": "The Shahdara–Tis Hazari section opened on 24 December 2002." }
+        },
+        {
+          "id": "del_metro_002",
+          "question": { "en": "Which is Delhi Metro's busiest interchange station?", "hi": "दिल्ली मेट्रो का सबसे व्यस्त इंटरचेंज स्टेशन कौन सा है?" },
+          "options": { "en": ["Kashmere Gate", "Rajiv Chowk", "Central Secretariat", "New Delhi"] },
+          "correctIndex": 1
+        },
+        {
+          "id": "del_metro_003",
+          "question": { "en": "How many lines does Delhi Metro operate?", "hi": "दिल्ली मेट्रो कितनी लाइनें चलाती है?" },
+          "options": { "en": ["8", "10", "12", "14"] },
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "name": { "en": "Mughal & Delhi History", "hi": "मुगल और दिल्ली का इतिहास" },
+      "questions": [
+        {
+          "id": "del_hist_001",
+          "question": { "en": "Who commissioned the construction of Qutub Minar?", "hi": "क़ुतुब मीनार के निर्माण का आदेश किसने दिया था?" },
+          "options": { "en": ["Qutb-ud-din Aibak", "Akbar", "Shah Jahan", "Alauddin Khilji"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "del_hist_002",
+          "question": { "en": "India Gate was designed by which architect?", "hi": "इंडिया गेट को किस वास्तुकार ने डिज़ाइन किया?" },
+          "options": { "en": ["Edwin Lutyens", "Le Corbusier", "Charles Correa", "Herbert Baker"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "del_hist_003",
+          "question": { "en": "Red Fort was built by which Mughal emperor?", "hi": "लाल किला किस मुगल बादशाह ने बनवाया?" },
+          "options": { "en": ["Akbar", "Shah Jahan", "Aurangzeb", "Humayun"] },
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "id": "food",
+      "name": { "en": "Delhi Street Food", "hi": "दिल्ली का स्ट्रीट फूड" },
+      "questions": [
+        {
+          "id": "del_food_001",
+          "question": { "en": "Paranthe Wali Gali is famous for which dish?", "hi": "परांठे वाली गली किस व्यंजन के लिए प्रसिद्ध है?" },
+          "options": { "en": ["Parathas", "Chaat", "Kebabs", "Jalebi"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "del_food_002",
+          "question": { "en": "Which sweet shop is iconic in Chandni Chowk for jalebis?", "hi": "चाँदनी चौक में जलेबियों के लिए कौन सी दुकान प्रसिद्ध है?" },
+          "options": { "en": ["Old Famous Jalebi Wala", "Haldiram", "Bikanervala", "Karim's"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "del_food_003",
+          "question": { "en": "Karim's is famous for which kind of food?", "hi": "करीम्स किस प्रकार के खाने के लिए प्रसिद्ध है?" },
+          "options": { "en": ["Mughlai", "South Indian", "Chinese", "Continental"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "landmarks",
+      "name": { "en": "Delhi Landmarks", "hi": "दिल्ली के स्थल" },
+      "questions": [
+        {
+          "id": "del_lm_001",
+          "question": { "en": "Lotus Temple has how many marble petals?", "hi": "कमल मंदिर में कितनी संगमरमर की पंखुड़ियाँ हैं?" },
+          "options": { "en": ["19", "27", "36", "45"] },
+          "correctIndex": 1
+        },
+        {
+          "id": "del_lm_002",
+          "question": { "en": "Connaught Place was designed in which decade?", "hi": "कनॉट प्लेस किस दशक में डिज़ाइन किया गया?" },
+          "options": { "en": ["1920s", "1930s", "1940s", "1950s"] },
+          "correctIndex": 0
+        }
+      ]
+    }
+  ]
+}

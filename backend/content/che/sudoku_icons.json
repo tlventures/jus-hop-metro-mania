@@ -1,0 +1,17 @@
+{
+  "cityId": "che",
+  "title": { "en": "Chennai Sudoku", "ta": "சென்னை சுடோகு" },
+  "subtitle": { "en": "From Marina to filter kaapi — fill the grid with Chennai icons.", "ta": "மெரினாவில் இருந்து வடிகட்டிய காப்பி வரை — சென்னை சின்னங்களுடன் கட்டத்தை நிரப்பவும்." },
+  "icons": ["🌊", "☕", "🛕", "🥥", "🎶", "🍛", "🚇", "🎬", "🌶"],
+  "iconLabels": {
+    "🌊": "Marina Beach",
+    "☕": "Filter kaapi",
+    "🛕": "Kapaleeshwarar",
+    "🥥": "Coconut",
+    "🎶": "Carnatic music",
+    "🍛": "Sambar rice",
+    "🚇": "CMRL Metro",
+    "🎬": "Kollywood",
+    "🌶": "Chettinad spice"
+  }
+}

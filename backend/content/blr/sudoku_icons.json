@@ -1,0 +1,17 @@
+{
+  "cityId": "blr",
+  "title": { "en": "Bangalore Sudoku", "kn": "ಬೆಂಗಳೂರು ಸುಡೋಕು" },
+  "subtitle": { "en": "From Cubbon to filter coffee — fill the grid with Bangalore icons.", "kn": "ಕಬ್ಬನ್‌ನಿಂದ ಫಿಲ್ಟರ್ ಕಾಫಿಯವರೆಗೆ — ಬೆಂಗಳೂರಿನ ಚಿಹ್ನೆಗಳಿಂದ ಗ್ರಿಡ್ ತುಂಬಿರಿ." },
+  "icons": ["🏛", "🌳", "🌷", "☕", "🥞", "💻", "🚇", "🐂", "🎭"],
+  "iconLabels": {
+    "🏛": "Vidhana Soudha",
+    "🌳": "Cubbon Park",
+    "🌷": "Lalbagh",
+    "☕": "Filter coffee",
+    "🥞": "Masala dosa",
+    "💻": "Tech corridor",
+    "🚇": "Namma Metro",
+    "🐂": "Bull Temple",
+    "🎭": "Ranga Shankara"
+  }
+}

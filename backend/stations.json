@@ -1,0 +1,394 @@
+[
+  {
+    "id": "1",
+    "name": "Miyapur",
+    "line": "Red Line",
+    "latitude": 17.4969,
+    "longitude": 78.3951
+  },
+  {
+    "id": "2",
+    "name": "JNTU College",
+    "line": "Red Line",
+    "latitude": 17.4936,
+    "longitude": 78.3996
+  },
+  {
+    "id": "3",
+    "name": "KPHB Colony",
+    "line": "Red Line",
+    "latitude": 17.4846,
+    "longitude": 78.408
+  },
+  {
+    "id": "4",
+    "name": "Kukatpally",
+    "line": "Red Line",
+    "latitude": 17.4846,
+    "longitude": 78.4178
+  },
+  {
+    "id": "5",
+    "name": "Balanagar",
+    "line": "Red Line",
+    "latitude": 17.4741,
+    "longitude": 78.4367
+  },
+  {
+    "id": "6",
+    "name": "Moosapet",
+    "line": "Red Line",
+    "latitude": 17.4662,
+    "longitude": 78.4439
+  },
+  {
+    "id": "7",
+    "name": "Bharat Nagar",
+    "line": "Red Line",
+    "latitude": 17.4609,
+    "longitude": 78.4507
+  },
+  {
+    "id": "8",
+    "name": "Erragadda",
+    "line": "Red Line",
+    "latitude": 17.4539,
+    "longitude": 78.4564
+  },
+  {
+    "id": "9",
+    "name": "ESI Hospital",
+    "line": "Red Line",
+    "latitude": 17.4461,
+    "longitude": 78.4666
+  },
+  {
+    "id": "10",
+    "name": "SR Nagar",
+    "line": "Red Line",
+    "latitude": 17.4375,
+    "longitude": 78.4489
+  },
+  {
+    "id": "11",
+    "name": "Ameerpet",
+    "line": "Red & Blue Line",
+    "latitude": 17.4337,
+    "longitude": 78.4464
+  },
+  {
+    "id": "12",
+    "name": "Punjagutta",
+    "line": "Red Line",
+    "latitude": 17.4251,
+    "longitude": 78.4499
+  },
+  {
+    "id": "13",
+    "name": "Irrum Manzil",
+    "line": "Red Line",
+    "latitude": 17.4161,
+    "longitude": 78.4508
+  },
+  {
+    "id": "14",
+    "name": "Khairatabad",
+    "line": "Red Line",
+    "latitude": 17.4091,
+    "longitude": 78.4576
+  },
+  {
+    "id": "15",
+    "name": "Lakdikapul",
+    "line": "Red Line",
+    "latitude": 17.4026,
+    "longitude": 78.4625
+  },
+  {
+    "id": "16",
+    "name": "Assembly",
+    "line": "Red Line",
+    "latitude": 17.3983,
+    "longitude": 78.4696
+  },
+  {
+    "id": "17",
+    "name": "Nampally",
+    "line": "Red Line",
+    "latitude": 17.3927,
+    "longitude": 78.4755
+  },
+  {
+    "id": "18",
+    "name": "Gandhi Bhavan",
+    "line": "Red Line",
+    "latitude": 17.384,
+    "longitude": 78.4786
+  },
+  {
+    "id": "19",
+    "name": "Osmania Medical College",
+    "line": "Red Line",
+    "latitude": 17.3804,
+    "longitude": 78.4819
+  },
+  {
+    "id": "20",
+    "name": "MG Bus Station",
+    "line": "Red & Green Line",
+    "latitude": 17.378,
+    "longitude": 78.4849
+  },
+  {
+    "id": "21",
+    "name": "Malakpet",
+    "line": "Red Line",
+    "latitude": 17.3726,
+    "longitude": 78.4995
+  },
+  {
+    "id": "22",
+    "name": "New Market",
+    "line": "Red Line",
+    "latitude": 17.3665,
+    "longitude": 78.5135
+  },
+  {
+    "id": "23",
+    "name": "Musarambagh",
+    "line": "Red Line",
+    "latitude": 17.3614,
+    "longitude": 78.5246
+  },
+  {
+    "id": "24",
+    "name": "Dilsukhnagar",
+    "line": "Red Line",
+    "latitude": 17.3674,
+    "longitude": 78.5336
+  },
+  {
+    "id": "25",
+    "name": "Chaitanyapuri",
+    "line": "Red Line",
+    "latitude": 17.3714,
+    "longitude": 78.5426
+  },
+  {
+    "id": "26",
+    "name": "Victoria Memorial",
+    "line": "Red Line",
+    "latitude": 17.3782,
+    "longitude": 78.5515
+  },
+  {
+    "id": "27",
+    "name": "LB Nagar",
+    "line": "Red Line",
+    "latitude": 17.3469,
+    "longitude": 78.551
+  },
+  {
+    "id": "28",
+    "name": "Nagole",
+    "line": "Blue Line",
+    "latitude": 17.3917,
+    "longitude": 78.5583
+  },
+  {
+    "id": "29",
+    "name": "Uppal",
+    "line": "Blue Line",
+    "latitude": 17.4024,
+    "longitude": 78.5595
+  },
+  {
+    "id": "30",
+    "name": "Stadium",
+    "line": "Blue Line",
+    "latitude": 17.4075,
+    "longitude": 78.5552
+  },
+  {
+    "id": "31",
+    "name": "NGRI",
+    "line": "Blue Line",
+    "latitude": 17.4131,
+    "longitude": 78.5426
+  },
+  {
+    "id": "32",
+    "name": "Habsiguda",
+    "line": "Blue Line",
+    "latitude": 17.4167,
+    "longitude": 78.535
+  },
+  {
+    "id": "33",
+    "name": "Tarnaka",
+    "line": "Blue Line",
+    "latitude": 17.4202,
+    "longitude": 78.5276
+  },
+  {
+    "id": "34",
+    "name": "Mettuguda",
+    "line": "Blue Line",
+    "latitude": 17.432,
+    "longitude": 78.517
+  },
+  {
+    "id": "35",
+    "name": "Secunderabad",
+    "line": "Blue Line",
+    "latitude": 17.4336,
+    "longitude": 78.5033
+  },
+  {
+    "id": "36",
+    "name": "Paradise",
+    "line": "Blue Line",
+    "latitude": 17.4415,
+    "longitude": 78.4919
+  },
+  {
+    "id": "37",
+    "name": "Rasoolpura",
+    "line": "Blue Line",
+    "latitude": 17.448,
+    "longitude": 78.4804
+  },
+  {
+    "id": "38",
+    "name": "Prakash Nagar",
+    "line": "Blue Line",
+    "latitude": 17.4552,
+    "longitude": 78.4682
+  },
+  {
+    "id": "39",
+    "name": "Begumpet",
+    "line": "Blue Line",
+    "latitude": 17.4421,
+    "longitude": 78.4521
+  },
+  {
+    "id": "40",
+    "name": "Madhura Nagar",
+    "line": "Blue Line",
+    "latitude": 17.4253,
+    "longitude": 78.4399
+  },
+  {
+    "id": "41",
+    "name": "Yusufguda",
+    "line": "Blue Line",
+    "latitude": 17.4222,
+    "longitude": 78.4312
+  },
+  {
+    "id": "42",
+    "name": "Road No. 5 Jubilee Hills",
+    "line": "Blue Line",
+    "latitude": 17.4216,
+    "longitude": 78.4183
+  },
+  {
+    "id": "43",
+    "name": "Jubilee Hills Check Post",
+    "line": "Blue Line",
+    "latitude": 17.4228,
+    "longitude": 78.4059
+  },
+  {
+    "id": "44",
+    "name": "Peddamma Temple",
+    "line": "Blue Line",
+    "latitude": 17.427,
+    "longitude": 78.399
+  },
+  {
+    "id": "45",
+    "name": "Madhapur",
+    "line": "Blue Line",
+    "latitude": 17.4389,
+    "longitude": 78.3939
+  },
+  {
+    "id": "46",
+    "name": "Durgam Cheruvu",
+    "line": "Blue Line",
+    "latitude": 17.4412,
+    "longitude": 78.3844
+  },
+  {
+    "id": "47",
+    "name": "HITEC City",
+    "line": "Blue Line",
+    "latitude": 17.45,
+    "longitude": 78.382
+  },
+  {
+    "id": "48",
+    "name": "Raidurg",
+    "line": "Blue Line",
+    "latitude": 17.4501,
+    "longitude": 78.3744
+  },
+  {
+    "id": "49",
+    "name": "JBS Parade Ground",
+    "line": "Green Line",
+    "latitude": 17.4536,
+    "longitude": 78.4975
+  },
+  {
+    "id": "50",
+    "name": "Secunderabad West",
+    "line": "Green Line",
+    "latitude": 17.4473,
+    "longitude": 78.4975
+  },
+  {
+    "id": "51",
+    "name": "Gandhi Hospital",
+    "line": "Green Line",
+    "latitude": 17.4398,
+    "longitude": 78.4903
+  },
+  {
+    "id": "52",
+    "name": "Musheerabad",
+    "line": "Green Line",
+    "latitude": 17.4265,
+    "longitude": 78.489
+  },
+  {
+    "id": "53",
+    "name": "RTC X Roads",
+    "line": "Green Line",
+    "latitude": 17.4161,
+    "longitude": 78.4901
+  },
+  {
+    "id": "54",
+    "name": "Chikkadpally",
+    "line": "Green Line",
+    "latitude": 17.4057,
+    "longitude": 78.4906
+  },
+  {
+    "id": "55",
+    "name": "Narayanguda",
+    "line": "Green Line",
+    "latitude": 17.3954,
+    "longitude": 78.4906
+  },
+  {
+    "id": "56",
+    "name": "Sultan Bazar",
+    "line": "Green Line",
+    "latitude": 17.3825,
+    "longitude": 78.4888
+  }
+]

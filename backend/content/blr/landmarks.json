@@ -1,0 +1,12 @@
+{
+  "cityId": "blr",
+  "landmarks": [
+    { "id": "lm_vidhana",   "name": { "en": "Vidhana Soudha",    "kn": "ವಿಧಾನ ಸೌಧ"     }, "category": "government","lat": 12.9794, "lng": 77.5912, "icon": "🏛", "description": { "en": "Massive Neo-Dravidian state legislature building in granite." }, "nearestStationId": "blr_pur_12" },
+    { "id": "lm_cubbon",    "name": { "en": "Cubbon Park",       "kn": "ಕಬ್ಬನ್ ಪಾರ್ಕ್"}, "category": "natural",   "lat": 12.9763, "lng": 77.5929, "icon": "🌳", "description": { "en": "300-acre central green lung of Bangalore." }, "nearestStationId": "blr_pur_12" },
+    { "id": "lm_lalbagh",   "name": { "en": "Lalbagh Garden",    "kn": "ಲಾಲ್‌ಬಾಗ್"     }, "category": "natural",   "lat": 12.9507, "lng": 77.5848, "icon": "🌷", "description": { "en": "Glass-house botanical garden begun by Hyder Ali in 1760." }, "nearestStationId": "blr_pur_10" },
+    { "id": "lm_iskcon",    "name": { "en": "ISKCON Temple",     "kn": "ಇಸ್ಕಾನ್ ದೇವಸ್ಥಾನ"}, "category": "religious", "lat": 13.0096, "lng": 77.5511, "icon": "🛕", "description": { "en": "Majestic Krishna temple on Hare Krishna Hill, with panoramic city views." }, "nearestStationId": "blr_grn_24" },
+    { "id": "lm_bull",      "name": { "en": "Bull Temple",       "kn": "ದೊಡ್ಡ ಬಸವಣ್ಣ"   }, "category": "religious", "lat": 12.9430, "lng": 77.5666, "icon": "🐂", "description": { "en": "16th-century Nandi temple with a 4.6m tall monolithic bull." }, "nearestStationId": "blr_pur_06" },
+    { "id": "lm_tipus",     "name": { "en": "Tipu Sultan's Palace","kn": "ಟಿಪ್ಪು ಸುಲ್ತಾನ್ ಅರಮನೆ" }, "category": "heritage", "lat": 12.9591, "lng": 77.5751, "icon": "🏯", "description": { "en": "Tipu's elegant teakwood summer palace from 1791." }, "nearestStationId": "blr_grn_28" },
+    { "id": "lm_unesco_govt","name": { "en": "Bangalore Palace",   "kn": "ಬೆಂಗಳೂರು ಅರಮನೆ"}, "category": "heritage", "lat": 12.9988, "lng": 77.5921, "icon": "👑", "description": { "en": "Tudor-style royal residence modeled on Windsor Castle." }, "nearestStationId": "blr_pur_18" }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "cityId": "blr",
+  "collections": [
+    {
+      "id": "blr_landmarks",
+      "name": { "en": "Bangalore Landmarks", "kn": "ಬೆಂಗಳೂರಿನ ಸ್ಥಳಗಳು" },
+      "stamps": [
+        { "id": "stamp_vidhana",  "name": { "en": "Vidhana Soudha", "kn": "ವಿಧಾನ ಸೌಧ"     }, "rarity": "rare",   "icon": "🏛", "unlock": { "type": "visit_landmark", "landmarkId": "lm_vidhana" } },
+        { "id": "stamp_cubbon",   "name": { "en": "Cubbon Park",    "kn": "ಕಬ್ಬನ್ ಪಾರ್ಕ್"}, "rarity": "common", "icon": "🌳", "unlock": { "type": "visit_landmark", "landmarkId": "lm_cubbon"  } },
+        { "id": "stamp_lalbagh",  "name": { "en": "Lalbagh",        "kn": "ಲಾಲ್‌ಬಾಗ್"     }, "rarity": "common", "icon": "🌷", "unlock": { "type": "visit_landmark", "landmarkId": "lm_lalbagh" } },
+        { "id": "stamp_bull",     "name": { "en": "Bull Temple",    "kn": "ದೊಡ್ಡ ಬಸವಣ್ಣ"  }, "rarity": "rare",   "icon": "🐂", "unlock": { "type": "visit_landmark", "landmarkId": "lm_bull"    } }
+      ]
+    },
+    {
+      "id": "blr_stations",
+      "name": { "en": "Iconic Stations", "kn": "ಪ್ರಸಿದ್ಧ ನಿಲ್ದಾಣಗಳು" },
+      "stamps": [
+        { "id": "stamp_majestic",   "name": { "en": "Majestic",      "kn": "ಮೆಜೆಸ್ಟಿಕ್"  }, "rarity": "common", "icon": "🚉", "unlock": { "type": "station_visit", "stationId": "blr_int_11" } },
+        { "id": "stamp_mg_road",    "name": { "en": "MG Road",       "kn": "ಎಂಜಿ ರಸ್ತೆ"  }, "rarity": "common", "icon": "🚇", "unlock": { "type": "station_visit", "stationId": "blr_pur_13" } },
+        { "id": "stamp_whitefield", "name": { "en": "Whitefield",    "kn": "ವೈಟ್‌ಫೀಲ್ಡ್" }, "rarity": "rare",   "icon": "💻", "unlock": { "type": "station_visit", "stationId": "blr_grn_33" } }
+      ]
+    },
+    {
+      "id": "blr_festivals",
+      "name": { "en": "Festival Specials", "kn": "ಹಬ್ಬ ವಿಶೇಷಗಳು" },
+      "stamps": [
+        { "id": "stamp_dasara",    "name": { "en": "Dasara 2026",   "kn": "ದಸರಾ 2026"  }, "rarity": "legendary", "icon": "🐘", "unlock": { "type": "festival", "festivalId": "dasara", "window": "2026" } },
+        { "id": "stamp_ugadi",     "name": { "en": "Ugadi 2026",    "kn": "ಯುಗಾದಿ 2026"}, "rarity": "legendary", "icon": "🌿", "unlock": { "type": "festival", "festivalId": "ugadi",  "window": "2026" } },
+        { "id": "stamp_karaga",    "name": { "en": "Karaga 2026",   "kn": "ಕರಗ 2026"   }, "rarity": "legendary", "icon": "🏺", "unlock": { "type": "festival", "festivalId": "karaga", "window": "2026" } }
+      ]
+    }
+  ]
+}

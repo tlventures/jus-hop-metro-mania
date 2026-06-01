@@ -1,0 +1,33 @@
+{
+  "cityId": "che",
+  "collections": [
+    {
+      "id": "che_landmarks",
+      "name": { "en": "Chennai Landmarks", "ta": "சென்னை சின்னங்கள்" },
+      "stamps": [
+        { "id": "stamp_marina",     "name": { "en": "Marina Beach",         "ta": "மெரினா"          }, "rarity": "common", "icon": "🌊", "unlock": { "type": "visit_landmark", "landmarkId": "lm_marina"   } },
+        { "id": "stamp_kapal",      "name": { "en": "Kapaleeshwarar",       "ta": "கபாலீஸ்வரர்"    }, "rarity": "rare",   "icon": "🛕", "unlock": { "type": "visit_landmark", "landmarkId": "lm_kapal"    } },
+        { "id": "stamp_fort",       "name": { "en": "Fort St. George",      "ta": "செயின்ட் ஜார்ஜ்" }, "rarity": "rare",   "icon": "🏰", "unlock": { "type": "visit_landmark", "landmarkId": "lm_fort"     } },
+        { "id": "stamp_valluvar",   "name": { "en": "Valluvar Kottam",      "ta": "வள்ளுவர் கோட்டம்"}, "rarity": "rare",   "icon": "🛕", "unlock": { "type": "visit_landmark", "landmarkId": "lm_valluvar" } }
+      ]
+    },
+    {
+      "id": "che_stations",
+      "name": { "en": "Iconic Stations", "ta": "சிறப்பு நிலையங்கள்" },
+      "stamps": [
+        { "id": "stamp_central",  "name": { "en": "Chennai Central", "ta": "சென்னை சென்ட்ரல்" }, "rarity": "common", "icon": "🚉", "unlock": { "type": "station_visit", "stationId": "che_int_16" } },
+        { "id": "stamp_alandur",  "name": { "en": "Alandur",         "ta": "அலந்தூர்"            }, "rarity": "common", "icon": "🚇", "unlock": { "type": "station_visit", "stationId": "che_int_04" } },
+        { "id": "stamp_airport",  "name": { "en": "Chennai Airport", "ta": "சென்னை விமான நிலையம்"}, "rarity": "rare",   "icon": "✈️", "unlock": { "type": "station_visit", "stationId": "che_blu_01" } }
+      ]
+    },
+    {
+      "id": "che_festivals",
+      "name": { "en": "Festival Specials", "ta": "பண்டிகை சிறப்பு" },
+      "stamps": [
+        { "id": "stamp_pongal",   "name": { "en": "Pongal 2026",     "ta": "பொங்கல் 2026"      }, "rarity": "legendary", "icon": "🍚", "unlock": { "type": "festival", "festivalId": "pongal",   "window": "2026" } },
+        { "id": "stamp_navratri", "name": { "en": "Navratri 2026",   "ta": "நவராத்திரி 2026"   }, "rarity": "legendary", "icon": "🪔", "unlock": { "type": "festival", "festivalId": "navratri", "window": "2026" } },
+        { "id": "stamp_margazhi", "name": { "en": "Margazhi 2026",   "ta": "மார்கழி 2026"      }, "rarity": "legendary", "icon": "🎵", "unlock": { "type": "festival", "festivalId": "margazhi", "window": "2026" } }
+      ]
+    }
+  ]
+}

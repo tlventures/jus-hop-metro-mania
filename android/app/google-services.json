@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1032792080232",
+    "project_id": "metrosafar-5bcff",
+    "storage_bucket": "metrosafar-5bcff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1032792080232:android:74588e54cb0668dca9a0dd",
+        "android_client_info": {
+          "package_name": "com.tlventures.metrosafar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCY0KB0L0DIRe9wagli57p9-E8NLmYJaJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

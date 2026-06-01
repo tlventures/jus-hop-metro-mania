@@ -1,0 +1,12 @@
+{
+  "cityId": "del",
+  "landmarks": [
+    { "id": "lm_india_gate",  "name": { "en": "India Gate",        "hi": "इंडिया गेट"    }, "category": "monument", "lat": 28.6129, "lng": 77.2295, "icon": "🏛", "description": { "en": "42m war memorial honoring 84,000 Indian soldiers of WWI." }, "nearestStationId": "del_blu_38" },
+    { "id": "lm_qutub",       "name": { "en": "Qutub Minar",        "hi": "क़ुतुब मीनार"   }, "category": "heritage", "lat": 28.5245, "lng": 77.1855, "icon": "🗼", "description": { "en": "73m tall 12th-century minaret — UNESCO World Heritage Site." }, "nearestStationId": "del_yel_28" },
+    { "id": "lm_lotus",       "name": { "en": "Lotus Temple",       "hi": "कमल मंदिर"     }, "category": "religious","lat": 28.5535, "lng": 77.2588, "icon": "🪷", "description": { "en": "27-petalled marble Bahá'í House of Worship, open to all faiths." }, "nearestStationId": "del_yel_27" },
+    { "id": "lm_red_fort",    "name": { "en": "Red Fort",           "hi": "लाल किला"       }, "category": "heritage", "lat": 28.6562, "lng": 77.2410, "icon": "🏯", "description": { "en": "17th-century Mughal fortress and seat of the Mughal emperors." }, "nearestStationId": "del_yel_13" },
+    { "id": "lm_connaught",   "name": { "en": "Connaught Place",    "hi": "कनॉट प्लेस"     }, "category": "commercial","lat": 28.6315, "lng": 77.2167, "icon": "🛍", "description": { "en": "Iconic Georgian-style circular shopping district designed in the 1930s." }, "nearestStationId": "del_int_16" },
+    { "id": "lm_humayun",     "name": { "en": "Humayun's Tomb",     "hi": "हुमायूँ का मक़बरा"}, "category": "heritage", "lat": 28.5933, "lng": 77.2507, "icon": "🕌", "description": { "en": "Inspiration for the Taj Mahal — UNESCO World Heritage Site." }, "nearestStationId": "del_blu_38" },
+    { "id": "lm_jama_masjid", "name": { "en": "Jama Masjid",         "hi": "जामा मस्जिद",   "ur": "جامع مسجد" }, "category": "religious", "lat": 28.6507, "lng": 77.2334, "icon": "🕌", "description": { "en": "One of India's largest mosques, built by Shah Jahan in 1656." }, "nearestStationId": "del_yel_13" }
+  ]
+}

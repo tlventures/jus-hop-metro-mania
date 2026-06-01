@@ -1,0 +1,12 @@
+{
+  "cityId": "che",
+  "landmarks": [
+    { "id": "lm_marina",    "name": { "en": "Marina Beach",        "ta": "மெரினா கடற்கரை"     }, "category": "natural",   "lat": 13.0500, "lng": 80.2824, "icon": "🌊", "description": { "en": "13km-long sandy beach — Asia's longest natural urban beach." }, "nearestStationId": "che_blu_15" },
+    { "id": "lm_kapal",     "name": { "en": "Kapaleeshwarar Temple","ta": "கபாலீஸ்வரர் கோயில்"}, "category": "religious", "lat": 13.0339, "lng": 80.2696, "icon": "🛕", "description": { "en": "7th-century Dravidian-architecture Shiva temple in Mylapore." }, "nearestStationId": "che_blu_12" },
+    { "id": "lm_fort",      "name": { "en": "Fort St. George",      "ta": "செயின்ட் ஜார்ஜ் கோட்டை"}, "category": "heritage", "lat": 13.0796, "lng": 80.2872, "icon": "🏰", "description": { "en": "First English fortress in India (1644), still housing the state secretariat." }, "nearestStationId": "che_int_16" },
+    { "id": "lm_valluvar",  "name": { "en": "Valluvar Kottam",      "ta": "வள்ளுவர் கோட்டம்"   }, "category": "monument",  "lat": 13.0578, "lng": 80.2418, "icon": "🛕", "description": { "en": "Monument to poet-saint Thiruvalluvar with a 39m chariot replica." }, "nearestStationId": "che_blu_10" },
+    { "id": "lm_san_thome", "name": { "en": "San Thome Basilica",   "ta": "சாந்தோம் தேவாலயம்"  }, "category": "religious", "lat": 13.0335, "lng": 80.2773, "icon": "⛪", "description": { "en": "Neo-Gothic basilica built over the tomb of Apostle Thomas." }, "nearestStationId": "che_blu_12" },
+    { "id": "lm_govt_museum","name":{ "en": "Government Museum",     "ta": "அரசு அருங்காட்சியகம்"}, "category": "museum",   "lat": 13.0709, "lng": 80.2587, "icon": "🖼", "description": { "en": "India's second-oldest museum, famous for Chola bronzes." }, "nearestStationId": "che_blu_10" },
+    { "id": "lm_mahab",     "name": { "en": "Mahabalipuram (nearby)","ta": "மகாபலிபுரம்"        }, "category": "heritage", "lat": 12.6269, "lng": 80.1927, "icon": "🪨", "description": { "en": "7th-century Pallava-era rock-cut temples — UNESCO World Heritage." }, "nearestStationId": "che_blu_01" }
+  ]
+}

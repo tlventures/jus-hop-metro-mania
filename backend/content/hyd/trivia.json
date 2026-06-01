@@ -1,0 +1,100 @@
+{
+  "cityId": "hyd",
+  "defaultLocale": "en",
+  "categories": [
+    {
+      "id": "metro",
+      "name": { "en": "Metro Trivia", "te": "మెట్రో ట్రివియా", "hi": "मेट्रो ट्रिविया" },
+      "questions": [
+        {
+          "id": "hyd_metro_001",
+          "question": { "en": "In which year did Hyderabad Metro begin passenger operations?", "te": "హైదరాబాద్ మెట్రో ఏ సంవత్సరంలో ప్రయాణీకుల కార్యకలాపాలను ప్రారంభించింది?" },
+          "options": { "en": ["2015", "2016", "2017", "2018"], "te": ["2015", "2016", "2017", "2018"] },
+          "correctIndex": 2,
+          "explanation": { "en": "Hyderabad Metro Rail opened the Miyapur–Nagole stretch on 29 November 2017." }
+        },
+        {
+          "id": "hyd_metro_002",
+          "question": { "en": "Which is the longest metro line in Hyderabad?", "te": "హైదరాబాద్‌లో అతి పొడవైన మెట్రో రేఖ ఏది?" },
+          "options": { "en": ["Red Line", "Blue Line", "Green Line", "Purple Line"], "te": ["ఎరుపు రేఖ", "నీలి రేఖ", "ఆకుపచ్చ రేఖ", "ఊదా రేఖ"] },
+          "correctIndex": 0,
+          "explanation": { "en": "The Red Line from Miyapur to LB Nagar is the longest at ~29 km." }
+        },
+        {
+          "id": "hyd_metro_003",
+          "question": { "en": "Which Hyderabad Metro station is an interchange for Red and Blue Lines?", "te": "ఏ మెట్రో స్టేషన్ ఎరుపు మరియు నీలి రేఖల కూడలి?" },
+          "options": { "en": ["Secunderabad", "Ameerpet", "HITEC City", "MG Bus Station"], "te": ["సికింద్రాబాద్", "అమీర్‌పేట", "హైటెక్ సిటీ", "ఎంజి బస్ స్టేషన్"] },
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "name": { "en": "Nizami Heritage", "te": "నిజామీ వారసత్వం", "ur": "نظامی ورثہ" },
+      "questions": [
+        {
+          "id": "hyd_hist_001",
+          "question": { "en": "Who founded the city of Hyderabad in 1591?", "te": "1591లో హైదరాబాద్ నగరాన్ని ఎవరు స్థాపించారు?" },
+          "options": { "en": ["Quli Qutb Shah", "Aurangzeb", "Nizam-ul-Mulk", "Tipu Sultan"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "hyd_hist_002",
+          "question": { "en": "Charminar was built in which year?", "te": "చార్మినార్ ఏ సంవత్సరంలో నిర్మించబడింది?" },
+          "options": { "en": ["1591", "1612", "1650", "1700"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "hyd_hist_003",
+          "question": { "en": "Golconda Fort was famous for which precious stone trade?", "te": "గోల్కొండ కోట ఏ విలువైన రాతి వ్యాపారానికి ప్రసిద్ధి?" },
+          "options": { "en": ["Diamonds", "Rubies", "Emeralds", "Sapphires"] },
+          "correctIndex": 0,
+          "explanation": { "en": "Golconda was the diamond capital — the Kohinoor and Hope diamonds came from its mines." }
+        }
+      ]
+    },
+    {
+      "id": "food",
+      "name": { "en": "Hyderabadi Cuisine", "te": "హైదరాబాదీ వంటకాలు", "ur": "حیدرآبادی کھانے" },
+      "questions": [
+        {
+          "id": "hyd_food_001",
+          "question": { "en": "Which dish is most famously associated with Hyderabad?", "te": "ఏ వంటకం హైదరాబాద్‌తో ప్రసిద్ధంగా ముడిపడి ఉంది?" },
+          "options": { "en": ["Hyderabadi Biryani", "Dosa", "Butter Chicken", "Pav Bhaji"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "hyd_food_002",
+          "question": { "en": "Haleem is traditionally eaten during which month?", "te": "హలీం సాంప్రదాయకంగా ఏ నెలలో తింటారు?" },
+          "options": { "en": ["Ramzan", "Muharram", "Bonalu", "Diwali"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "hyd_food_003",
+          "question": { "en": "Irani chai is famously served at which old Hyderabad institution?", "te": "ఇరానీ చాయ్ హైదరాబాద్‌లోని ఏ పురాతన సంస్థలో ప్రసిద్ధంగా అందిస్తారు?" },
+          "options": { "en": ["Café Niloufer", "Paradise", "Bahar Café", "All of these"] },
+          "correctIndex": 3
+        }
+      ]
+    },
+    {
+      "id": "landmarks",
+      "name": { "en": "City Landmarks", "te": "నగర ప్రత్యేకతలు" },
+      "questions": [
+        {
+          "id": "hyd_lm_001",
+          "question": { "en": "Hussain Sagar Lake is shaped like which letter?", "te": "హుస్సేన్ సాగర్ సరస్సు ఏ అక్షరం ఆకారంలో ఉంది?" },
+          "options": { "en": ["A heart", "An L", "An S", "A circle"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "hyd_lm_002",
+          "question": { "en": "How many minarets does Charminar have?", "te": "చార్మినార్‌కు ఎన్ని మినార్లు ఉన్నాయి?" },
+          "options": { "en": ["2", "4", "6", "8"] },
+          "correctIndex": 1,
+          "explanation": { "en": "'Char' means four — Charminar literally means four-pillared." }
+        }
+      ]
+    }
+  ]
+}

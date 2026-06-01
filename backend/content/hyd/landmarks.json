@@ -1,0 +1,12 @@
+{
+  "cityId": "hyd",
+  "landmarks": [
+    { "id": "lm_charminar",    "name": { "en": "Charminar",         "te": "చార్మినార్"        }, "category": "monument", "lat": 17.3629, "lng": 78.4785, "icon": "🕌", "description": { "en": "Iconic 400-year-old monument and symbol of the city.", "te": "నగరానికి చిహ్నంగా నిలిచిన 400 ఏళ్ల పురాతన కట్టడం." }, "nearestStationId": "hyd_grn_56" },
+    { "id": "lm_golconda",     "name": { "en": "Golconda Fort",     "te": "గోల్కొండ కోట"     }, "category": "heritage", "lat": 17.3816, "lng": 78.4005, "icon": "🏰", "description": { "en": "Massive 14th-century fortress, home of the world's most famous diamonds." }, "nearestStationId": "hyd_blu_47" },
+    { "id": "lm_mecca_masjid", "name": { "en": "Mecca Masjid",      "te": "మక్కా మసీదు"      }, "category": "religious","lat": 17.3610, "lng": 78.4735, "icon": "🕌", "description": { "en": "One of India's largest and oldest mosques, near Charminar." }, "nearestStationId": "hyd_grn_56" },
+    { "id": "lm_hussain_sagar","name": { "en": "Hussain Sagar",     "te": "హుస్సేన్ సాగర్"   }, "category": "natural", "lat": 17.4239, "lng": 78.4738, "icon": "💧", "description": { "en": "Heart-shaped lake separating Hyderabad and Secunderabad." }, "nearestStationId": "hyd_blu_38" },
+    { "id": "lm_chowmahalla",  "name": { "en": "Chowmahalla Palace","te": "చౌమహల్లా ప్యాలెస్"}, "category": "heritage", "lat": 17.3582, "lng": 78.4729, "icon": "🏛", "description": { "en": "Former Nizam palace with grand durbar hall and royal artefacts." }, "nearestStationId": "hyd_grn_56" },
+    { "id": "lm_birla_mandir", "name": { "en": "Birla Mandir",      "te": "బిర్లా మందిర్"    }, "category": "religious","lat": 17.4079, "lng": 78.4670, "icon": "🛕", "description": { "en": "White marble Vishnu temple atop Naubat Pahad with city views." }, "nearestStationId": "hyd_red_14" },
+    { "id": "lm_salar_jung",   "name": { "en": "Salar Jung Museum", "te": "సాలార్ జంగ్ మ్యూజియం"}, "category": "museum", "lat": 17.3713, "lng": 78.4804, "icon": "🖼", "description": { "en": "One of India's largest single-collection museums." }, "nearestStationId": "hyd_red_19" }
+  ]
+}

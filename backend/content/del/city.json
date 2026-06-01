@@ -1,0 +1,52 @@
+{
+  "id": "del",
+  "name": { "en": "Delhi NCR", "hi": "दिल्ली", "pa": "ਦਿੱਲੀ", "ur": "دہلی" },
+  "operator": { "id": "dmrc", "name": "Delhi Metro Rail Corporation", "shortName": "DMRC" },
+  "country": "IN",
+  "timezone": "Asia/Kolkata",
+  "bbox": { "minLat": 28.35, "maxLat": 28.90, "minLng": 76.80, "maxLng": 77.50 },
+  "center": { "lat": 28.6139, "lng": 77.2090 },
+  "primaryLocales": ["hi", "pa", "ur", "en"],
+  "defaultLocale": "hi",
+  "lines": [
+    { "id": "yellow", "name": { "en": "Yellow Line", "hi": "पीली लाइन" },  "color": "#FBBF24" },
+    { "id": "blue",   "name": { "en": "Blue Line",   "hi": "नीली लाइन" },  "color": "#2563EB" },
+    { "id": "red",    "name": { "en": "Red Line",    "hi": "लाल लाइन"  },  "color": "#DC2626" },
+    { "id": "green",  "name": { "en": "Green Line",  "hi": "हरी लाइन"  },  "color": "#16A34A" },
+    { "id": "violet", "name": { "en": "Violet Line", "hi": "बैंगनी लाइन" }, "color": "#7C3AED" },
+    { "id": "pink",   "name": { "en": "Pink Line",   "hi": "गुलाबी लाइन" }, "color": "#EC4899" },
+    { "id": "magenta","name": { "en": "Magenta Line","hi": "मैजेंटा लाइन" },"color": "#A21CAF" },
+    { "id": "grey",   "name": { "en": "Grey Line",   "hi": "ग्रे लाइन"  },  "color": "#6B7280" }
+  ],
+  "currency": "INR",
+  "fareGrammar": { "minFare": 10, "maxFare": 60, "smartCardDiscountPct": 10 },
+  "brand": {
+    "primary": "#1D4ED8",
+    "accent": "#FBBF24",
+    "surfaceVariant": "#EFF6FF",
+    "skylineAsset": "skyline_del",
+    "iconStamp": "stamp_india_gate"
+  },
+  "greetings": {
+    "morning":   { "hi": "सुप्रभात", "pa": "ਸ਼ੁਭ ਸਵੇਰ", "ur": "صبح بخیر",  "en": "Good morning"   },
+    "afternoon": { "hi": "शुभ दोपहर","pa": "ਦੁਪਹਿਰ ਦਾ ਸ਼ੁਭਕਾਮਨਾਵਾਂ", "en": "Good afternoon" },
+    "evening":   { "hi": "शुभ संध्या","pa": "ਸ਼ੁਭ ਸ਼ਾਮ",  "ur": "شام بخیر",  "en": "Good evening"   }
+  },
+  "phrases": {
+    "rideComplete": { "hi": "सफर पूरा हुआ!", "en": "Ride complete!" },
+    "streakCheer":  { "hi": "वाह!", "pa": "ਵਾਹ!", "en": "Outstanding!" },
+    "loadingLine":  { "en": "Rajiv Chowk se HUDA City Centre tak…", "hi": "राजीव चौक से गुरुग्राम तक…" }
+  },
+  "festivalWindows": [
+    { "id": "diwali",   "startMMDD": "10-20", "endMMDD": "11-05", "themeId": "diwali_del" },
+    { "id": "holi",     "startMMDD": "03-05", "endMMDD": "03-15", "themeId": "holi_del"   },
+    { "id": "lohri",    "startMMDD": "01-12", "endMMDD": "01-14", "themeId": "lohri_del"  }
+  ],
+  "signature": {
+    "food": ["Chole bhature", "Kulfi", "Jalebi", "Paranthe wali gali", "Butter chicken"],
+    "landmarks": ["India Gate", "Qutub Minar", "Lotus Temple", "Red Fort", "Connaught Place"],
+    "identity": "Heart of India"
+  },
+  "status": "beta",
+  "version": 1
+}

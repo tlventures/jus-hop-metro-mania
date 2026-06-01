@@ -1,0 +1,33 @@
+{
+  "cityId": "hyd",
+  "collections": [
+    {
+      "id": "hyd_landmarks",
+      "name": { "en": "Hyderabad Landmarks", "te": "హైదరాబాద్ ప్రత్యేకతలు" },
+      "stamps": [
+        { "id": "stamp_charminar",     "name": { "en": "Charminar",       "te": "చార్మినార్"     }, "rarity": "common", "icon": "🕌", "unlock": { "type": "visit_landmark", "landmarkId": "lm_charminar" } },
+        { "id": "stamp_golconda",      "name": { "en": "Golconda Fort",   "te": "గోల్కొండ"       }, "rarity": "rare",   "icon": "🏰", "unlock": { "type": "visit_landmark", "landmarkId": "lm_golconda" } },
+        { "id": "stamp_hussain_sagar", "name": { "en": "Hussain Sagar",   "te": "హుస్సేన్ సాగర్"}, "rarity": "common", "icon": "💧", "unlock": { "type": "visit_landmark", "landmarkId": "lm_hussain_sagar" } },
+        { "id": "stamp_chowmahalla",   "name": { "en": "Chowmahalla",     "te": "చౌమహల్లా"     }, "rarity": "rare",   "icon": "🏛", "unlock": { "type": "visit_landmark", "landmarkId": "lm_chowmahalla" } }
+      ]
+    },
+    {
+      "id": "hyd_stations",
+      "name": { "en": "Iconic Stations", "te": "ప్రత్యేక మెట్రో నిలయాలు" },
+      "stamps": [
+        { "id": "stamp_ameerpet",    "name": { "en": "Ameerpet",         "te": "అమీర్‌పేట" }, "rarity": "common", "icon": "🚉", "unlock": { "type": "station_visit", "stationId": "hyd_int_11" } },
+        { "id": "stamp_hitec",       "name": { "en": "HITEC City",       "te": "హైటెక్ సిటీ" },"rarity": "common", "icon": "💻", "unlock": { "type": "station_visit", "stationId": "hyd_blu_47" } },
+        { "id": "stamp_secunderabad","name": { "en": "Secunderabad",     "te": "సికింద్రాబాద్" },"rarity": "common","icon": "🚆", "unlock": { "type": "station_visit", "stationId": "hyd_blu_35" } }
+      ]
+    },
+    {
+      "id": "hyd_festivals",
+      "name": { "en": "Festival Specials", "te": "పండుగ ప్రత్యేకతలు" },
+      "stamps": [
+        { "id": "stamp_bonalu",      "name": { "en": "Bonalu 2026",      "te": "బోనాలు 2026"   }, "rarity": "legendary", "icon": "🪔", "unlock": { "type": "festival",    "festivalId": "bonalu", "window": "2026" } },
+        { "id": "stamp_ganesh_hyd",  "name": { "en": "Ganesh Festival",  "te": "గణేష్ ఉత్సవం"  }, "rarity": "legendary", "icon": "🐘", "unlock": { "type": "festival",    "festivalId": "ganesh", "window": "2026" } },
+        { "id": "stamp_bathukamma",  "name": { "en": "Bathukamma",       "te": "బతుకమ్మ"        }, "rarity": "legendary", "icon": "🌼", "unlock": { "type": "festival",    "festivalId": "bathukamma","window": "2026" } }
+      ]
+    }
+  ]
+}

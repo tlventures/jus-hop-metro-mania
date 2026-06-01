@@ -1,0 +1,91 @@
+{
+  "cityId": "blr",
+  "defaultLocale": "kn",
+  "categories": [
+    {
+      "id": "metro",
+      "name": { "en": "Namma Metro", "kn": "ನಮ್ಮ ಮೆಟ್ರೋ" },
+      "questions": [
+        {
+          "id": "blr_metro_001",
+          "question": { "en": "In which year did Namma Metro begin operations?", "kn": "ನಮ್ಮ ಮೆಟ್ರೋ ಯಾವ ವರ್ಷದಲ್ಲಿ ಪ್ರಾರಂಭವಾಯಿತು?" },
+          "options": { "en": ["2009", "2011", "2013", "2015"] },
+          "correctIndex": 1,
+          "explanation": { "en": "BMRCL launched the Reach-1 stretch from Baiyappanahalli to MG Road on 20 October 2011." }
+        },
+        {
+          "id": "blr_metro_002",
+          "question": { "en": "Which is the interchange station between Purple and Green Lines?", "kn": "ನೇರಳೆ ಮತ್ತು ಹಸಿರು ಮಾರ್ಗಗಳ ಕೂಡುವ ನಿಲ್ದಾಣ ಯಾವುದು?" },
+          "options": { "en": ["MG Road", "Majestic (Kempegowda)", "Yeshwanthpur", "Cubbon Park"] },
+          "correctIndex": 1
+        },
+        {
+          "id": "blr_metro_003",
+          "question": { "en": "After whom is Bangalore's central metro station named?", "kn": "ಬೆಂಗಳೂರಿನ ಕೇಂದ್ರ ಮೆಟ್ರೋ ನಿಲ್ದಾಣಕ್ಕೆ ಯಾರ ಹೆಸರು ಇಡಲಾಗಿದೆ?" },
+          "options": { "en": ["Tipu Sultan", "Kempegowda", "Krishnaraja Wadiyar", "Hyder Ali"] },
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "name": { "en": "Garden City History", "kn": "ಉದ್ಯಾನ ನಗರಿಯ ಇತಿಹಾಸ" },
+      "questions": [
+        {
+          "id": "blr_hist_001",
+          "question": { "en": "Who founded the city of Bangalore?", "kn": "ಬೆಂಗಳೂರು ನಗರವನ್ನು ಯಾರು ಸ್ಥಾಪಿಸಿದರು?" },
+          "options": { "en": ["Kempe Gowda I", "Tipu Sultan", "Hyder Ali", "Krishna Raja Wadiyar"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "blr_hist_002",
+          "question": { "en": "Vidhana Soudha was inaugurated in which year?", "kn": "ವಿಧಾನ ಸೌಧವನ್ನು ಯಾವ ವರ್ಷದಲ್ಲಿ ಉದ್ಘಾಟಿಸಲಾಯಿತು?" },
+          "options": { "en": ["1956", "1962", "1970", "1980"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "blr_hist_003",
+          "question": { "en": "Lalbagh's iconic glass house was inspired by which London structure?", "kn": "ಲಾಲ್‌ಬಾಗ್‌ನ ಗಾಜಿನ ಮನೆ ಯಾವ ಲಂಡನ್ ಕಟ್ಟಡದಿಂದ ಪ್ರೇರಣೆ ಪಡೆದಿದೆ?" },
+          "options": { "en": ["Crystal Palace", "Big Ben", "Buckingham Palace", "Tower Bridge"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "food",
+      "name": { "en": "Bangalore Food", "kn": "ಬೆಂಗಳೂರಿನ ಆಹಾರ" },
+      "questions": [
+        {
+          "id": "blr_food_001",
+          "question": { "en": "Which legendary eatery is famous for masala dosa near MG Road?", "kn": "ಎಂಜಿ ರಸ್ತೆಯ ಬಳಿ ಮಸಾಲಾ ದೋಸೆಗಾಗಿ ಪ್ರಸಿದ್ಧವಾದ ಸ್ಥಳ ಯಾವುದು?" },
+          "options": { "en": ["Mavalli Tiffin Room (MTR)", "Vidyarthi Bhavan", "CTR", "Brahmin's Coffee Bar"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "blr_food_002",
+          "question": { "en": "Mysore Pak was invented at the kitchen of which royal court?", "kn": "ಮೈಸೂರ್ ಪಾಕ್ ಯಾವ ರಾಜಮನೆತನದ ಅಡುಗೆಮನೆಯಲ್ಲಿ ಸಂಶೋಧಿಸಲಾಯಿತು?" },
+          "options": { "en": ["Wadiyars of Mysore", "Tipu Sultan", "Vijayanagara", "Hoysala"] },
+          "correctIndex": 0
+        }
+      ]
+    },
+    {
+      "id": "landmarks",
+      "name": { "en": "Bangalore Landmarks", "kn": "ಬೆಂಗಳೂರಿನ ಪ್ರಸಿದ್ಧ ಸ್ಥಳಗಳು" },
+      "questions": [
+        {
+          "id": "blr_lm_001",
+          "question": { "en": "What is Cubbon Park's official current name?", "kn": "ಕಬ್ಬನ್ ಪಾರ್ಕ್‌ನ ಅಧಿಕೃತ ಪ್ರಸ್ತುತ ಹೆಸರು ಏನು?" },
+          "options": { "en": ["Sri Chamarajendra Park", "Lalbagh", "Tipu's Garden", "Kempe Gowda Park"] },
+          "correctIndex": 0
+        },
+        {
+          "id": "blr_lm_002",
+          "question": { "en": "Which IT corridor is on the eastern end of the Purple Line?", "kn": "ನೇರಳೆ ಮಾರ್ಗದ ಪೂರ್ವ ತುದಿಯಲ್ಲಿರುವ ಐಟಿ ಕಾರಿಡಾರ್ ಯಾವುದು?" },
+          "options": { "en": ["Whitefield", "Electronic City", "Outer Ring Road", "Manyata Tech Park"] },
+          "correctIndex": 0
+        }
+      ]
+    }
+  ]
+}

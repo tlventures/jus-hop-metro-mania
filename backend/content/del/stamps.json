@@ -1,0 +1,33 @@
+{
+  "cityId": "del",
+  "collections": [
+    {
+      "id": "del_landmarks",
+      "name": { "en": "Delhi Landmarks", "hi": "दिल्ली के स्थल" },
+      "stamps": [
+        { "id": "stamp_india_gate", "name": { "en": "India Gate",   "hi": "इंडिया गेट"   }, "rarity": "common", "icon": "🏛", "unlock": { "type": "visit_landmark", "landmarkId": "lm_india_gate" } },
+        { "id": "stamp_qutub",      "name": { "en": "Qutub Minar",  "hi": "क़ुतुब मीनार"  }, "rarity": "rare",   "icon": "🗼", "unlock": { "type": "visit_landmark", "landmarkId": "lm_qutub"      } },
+        { "id": "stamp_lotus",      "name": { "en": "Lotus Temple", "hi": "कमल मंदिर"    }, "rarity": "rare",   "icon": "🪷", "unlock": { "type": "visit_landmark", "landmarkId": "lm_lotus"      } },
+        { "id": "stamp_red_fort",   "name": { "en": "Red Fort",     "hi": "लाल किला"     }, "rarity": "rare",   "icon": "🏯", "unlock": { "type": "visit_landmark", "landmarkId": "lm_red_fort"   } }
+      ]
+    },
+    {
+      "id": "del_stations",
+      "name": { "en": "Iconic Stations", "hi": "विशेष स्टेशन" },
+      "stamps": [
+        { "id": "stamp_rajiv_chowk",  "name": { "en": "Rajiv Chowk",     "hi": "राजीव चौक"     }, "rarity": "common", "icon": "🚉", "unlock": { "type": "station_visit", "stationId": "del_int_16" } },
+        { "id": "stamp_kashmere",     "name": { "en": "Kashmere Gate",   "hi": "कश्मीरी गेट"   }, "rarity": "rare",   "icon": "🚆", "unlock": { "type": "station_visit", "stationId": "del_int_12" } },
+        { "id": "stamp_huda",         "name": { "en": "HUDA City Centre","hi": "हुडा सिटी सेंटर"},"rarity": "common", "icon": "🚇", "unlock": { "type": "station_visit", "stationId": "del_yel_31" } }
+      ]
+    },
+    {
+      "id": "del_festivals",
+      "name": { "en": "Festival Specials", "hi": "त्योहार विशेष" },
+      "stamps": [
+        { "id": "stamp_diwali_del", "name": { "en": "Diwali 2026", "hi": "दिवाली 2026" }, "rarity": "legendary", "icon": "🪔", "unlock": { "type": "festival", "festivalId": "diwali", "window": "2026" } },
+        { "id": "stamp_holi_del",   "name": { "en": "Holi 2026",   "hi": "होली 2026"   }, "rarity": "legendary", "icon": "🎨", "unlock": { "type": "festival", "festivalId": "holi",   "window": "2026" } },
+        { "id": "stamp_lohri",      "name": { "en": "Lohri 2026",  "hi": "लोहड़ी 2026", "pa": "ਲੋਹੜੀ 2026" }, "rarity": "legendary", "icon": "🔥", "unlock": { "type": "festival", "festivalId": "lohri",  "window": "2026" } }
+      ]
+    }
+  ]
+}

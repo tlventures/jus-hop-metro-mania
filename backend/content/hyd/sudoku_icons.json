@@ -1,0 +1,17 @@
+{
+  "cityId": "hyd",
+  "title": { "en": "Hyderabadi Sudoku", "te": "హైదరాబాదీ సుడోకు" },
+  "subtitle": { "en": "Charminar to chai — fill the grid with Hyderabad icons.", "te": "చార్మినార్ నుండి చాయ్ వరకు — హైదరాబాద్ చిహ్నాలతో గ్రిడ్‌ను నింపండి." },
+  "icons": ["🕌", "🏰", "💧", "🍛", "🫖", "🥮", "🌙", "🚇", "💎"],
+  "iconLabels": {
+    "🕌": "Charminar",
+    "🏰": "Golconda",
+    "💧": "Hussain Sagar",
+    "🍛": "Biryani",
+    "🫖": "Irani chai",
+    "🥮": "Osmania biscuit",
+    "🌙": "Nizami",
+    "🚇": "Metro",
+    "💎": "Diamond"
+  }
+}
