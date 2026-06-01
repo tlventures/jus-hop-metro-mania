@@ -907,10 +907,19 @@ async function qualifyReferralForUser(clientId, trigger) {
   return { status: 'rewarded', referrerPointsAwarded: 150, referredPointsAwarded: 100 };
 }
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+// ALLOWED_ORIGINS env var: comma-separated list.
+// ADMIN_ORIGINS env var: comma-separated admin SPA origins (always appended).
+// Default admin origins are included for local dev and Firebase Hosting.
+const ADMIN_DEFAULT_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://admin.metrosafar.app',
+];
+const ALLOWED_ORIGINS = [
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean),
+  ...(process.env.ADMIN_ORIGINS    || '').split(',').map(o => o.trim()).filter(Boolean),
+  ...ADMIN_DEFAULT_ORIGINS,
+];
 
 function resolveCorsOrigin(origin, cb) {
   if (!origin) {
