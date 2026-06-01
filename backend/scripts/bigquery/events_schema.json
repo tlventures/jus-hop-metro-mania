@@ -1,0 +1,20 @@
+[
+  { "name": "event_date",        "type": "DATE",      "mode": "REQUIRED",  "description": "Partition key — date of event (UTC)" },
+  { "name": "event_id",          "type": "STRING",    "mode": "REQUIRED",  "description": "UUID v4 — deduplication key" },
+  { "name": "event_name",        "type": "STRING",    "mode": "REQUIRED",  "description": "Dotted event name e.g. game.completed" },
+  { "name": "schema_version",    "type": "STRING",    "mode": "NULLABLE",  "description": "Event schema semver" },
+  { "name": "ts",                "type": "TIMESTAMP", "mode": "REQUIRED",  "description": "Client event timestamp (ISO 8601)" },
+  { "name": "ingested_at",       "type": "TIMESTAMP", "mode": "REQUIRED",  "description": "Server ingest timestamp" },
+  { "name": "city_id",           "type": "STRING",    "mode": "NULLABLE",  "description": "Active city at time of event" },
+  { "name": "locale",            "type": "STRING",    "mode": "NULLABLE",  "description": "Device locale" },
+  { "name": "platform",          "type": "STRING",    "mode": "NULLABLE",  "description": "ios | android" },
+  { "name": "os_version",        "type": "STRING",    "mode": "NULLABLE",  "description": "OS version string" },
+  { "name": "app_version",       "type": "STRING",    "mode": "NULLABLE",  "description": "App build version" },
+  { "name": "device_model",      "type": "STRING",    "mode": "NULLABLE",  "description": "Device model name" },
+  { "name": "user_id",           "type": "STRING",    "mode": "NULLABLE",  "description": "Firebase UID (null if anonymous)" },
+  { "name": "anon_id",           "type": "STRING",    "mode": "NULLABLE",  "description": "Persistent anonymous device ID" },
+  { "name": "session_id",        "type": "STRING",    "mode": "NULLABLE",  "description": "Session UUID" },
+  { "name": "session_start_ts",  "type": "TIMESTAMP", "mode": "NULLABLE",  "description": "Session start timestamp" },
+  { "name": "trip_mode_active",  "type": "BOOLEAN",   "mode": "NULLABLE",  "description": "Whether user was in metro trip mode" },
+  { "name": "props",             "type": "JSON",      "mode": "NULLABLE",  "description": "Event-specific properties (flexible JSON)" }
+]
