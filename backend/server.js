@@ -8,6 +8,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const admin = require('firebase-admin');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const { RedisStore } = require('rate-limit-redis');
 const pino = require('pino');
 const pinoHttp = require('pino-http');
@@ -363,7 +364,10 @@ function buildLimiter(prefix, max, windowMs = 60_000) {
   return rateLimit({
     windowMs,
     max,
-    keyGenerator: (req) => req.clientId || req.ip,
+    // Authenticated users key by clientId; anonymous fall back to IP.
+    keyGenerator: (req) => req.clientId && req.clientId !== 'anonymous'
+      ? req.clientId
+      : ipKeyGenerator(req.ip),
     standardHeaders: true,
     legacyHeaders: false,
     store: makeRateLimitStore(prefix),
@@ -1094,12 +1098,19 @@ app.use(generalLimiter);
 app.use(async (req, _res, next) => {
   const authHeader = req.header('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
-    try {
-      const decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
-      req.uid = decoded.uid;
-      req.firebaseUser = { uid: decoded.uid, email: decoded.email, name: decoded.name, phone_number: decoded.phone_number };
-    } catch (_e) {
-      req.authError = 'Invalid or expired authentication token';
+    const token = authHeader.slice(7);
+    // Static ADMIN_API_KEY bypass (CI / bootstrap) — let it through the /api
+    // auth gate so requireAdmin's key fallback can grant admin access.
+    if (process.env.ADMIN_API_KEY && token === process.env.ADMIN_API_KEY) {
+      req.uid = 'api-key';
+    } else {
+      try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.uid = decoded.uid;
+        req.firebaseUser = { uid: decoded.uid, email: decoded.email, name: decoded.name, phone_number: decoded.phone_number };
+      } catch (_e) {
+        req.authError = 'Invalid or expired authentication token';
+      }
     }
   }
   req.clientId = req.uid || 'anonymous';
@@ -3658,14 +3669,26 @@ app.get('/api/admin/health', requireAdmin, async (_req, res, next) => {
 app.post('/api/admin/rbac/set-role', requireAdmin, async (req, res, next) => {
   try {
     if (req.admin.role !== 'superadmin') return res.status(403).json({ error: 'superadmin only' });
-    const { uid, role, cities } = req.body;
-    if (!uid || !role) return res.status(400).json({ error: 'uid and role required' });
+    const { uid, email, role, cities } = req.body;
+    if ((!uid && !email) || !role) return res.status(400).json({ error: 'uid or email, and role, required' });
     if (!ADMIN_ROLES.has(role)) return res.status(400).json({ error: `role must be one of: ${[...ADMIN_ROLES].join(', ')}` });
 
-    await admin.auth().setCustomUserClaims(uid, { role, cities: cities || [] });
-    await appendAudit({ actor: req.admin.uid, actorEmail: req.admin.email, role: req.admin.role, action: 'rbac.set_role', after: { uid, role, cities }, ip: req.ip, ua: req.get('user-agent') });
-    res.json({ success: true, uid, role, cities });
-  } catch (error) { next(error); }
+    // Resolve email → uid server-side (the backend SA has Firebase Auth access).
+    let targetUid = uid;
+    if (!targetUid && email) {
+      const userRecord = await admin.auth().getUserByEmail(email);
+      targetUid = userRecord.uid;
+    }
+
+    await admin.auth().setCustomUserClaims(targetUid, { role, cities: cities || [] });
+    await appendAudit({ actor: req.admin.uid, actorEmail: req.admin.email, role: req.admin.role, action: 'rbac.set_role', after: { uid: targetUid, email, role, cities }, ip: req.ip, ua: req.get('user-agent') });
+    res.json({ success: true, uid: targetUid, email: email || null, role, cities });
+  } catch (error) {
+    if (error.code === 'auth/user-not-found') {
+      return res.status(404).json({ error: 'No user with that email — sign in to the app once first to create the account.' });
+    }
+    next(error);
+  }
 });
 
 app.use((error, req, res, _next) => {
