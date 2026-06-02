@@ -12,6 +12,7 @@ import '../../../services/localization_service.dart';
 import '../../../services/user_display_name.dart';
 import '../application/streak_provider.dart';
 import '../application/quest_provider.dart';
+import '../application/home_provider.dart';
 import '../../wallet/application/wallet_provider.dart';
 import '../../play/application/games_provider.dart';
 import '../../profile/presentation/profile_screen.dart' show profileProvider;
@@ -32,11 +33,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(walletProvider.notifier).fetchWallet();
-      ref.read(streakProvider.notifier).fetchStreak();
-      ref.read(questsProvider.notifier).fetchQuests();
-    });
+    // Single aggregate call — replaces 3–5 separate fetches.
+    // Hydrates streak, quests, and wallet summary in one round-trip.
+    Future.microtask(() => ref.read(homeProvider.notifier).fetch());
   }
 
   @override

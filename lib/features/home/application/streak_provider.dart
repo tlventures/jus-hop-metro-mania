@@ -64,6 +64,19 @@ class StreakNotifier extends StateNotifier<Streak> {
     }
   }
 
+  /// Hydrate from the /api/home aggregate — no extra network call.
+  void hydrateFromHomeData(Map<String, dynamic> streakData) {
+    if (_disposed) return;
+    state = Streak(
+      currentDay:    (streakData['currentDay']    as num?)?.toInt() ?? state.currentDay,
+      longestStreak: (streakData['longestStreak'] as num?)?.toInt() ?? state.longestStreak,
+      lastClaimedAt: streakData['lastClaimedAt'] != null
+          ? DateTime.tryParse(streakData['lastClaimedAt'] as String) ?? state.lastClaimedAt
+          : state.lastClaimedAt,
+      totalPoints:   (streakData['totalPoints']   as num?)?.toInt() ?? state.totalPoints,
+    );
+  }
+
   Future<void> claimStreak() async {
     try {
       await _backendService.claimStreakBonus();

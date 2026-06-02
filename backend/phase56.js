@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const cron = require('node-cron');
 const { Server } = require('socket.io');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { getPubClient, getSubClient } = require('./lib/redis');
 
 const FEATURE_FLAG_DEFAULTS = {
   'phase5.trip_mode': false,
@@ -1391,6 +1393,17 @@ function createPhase56Realtime(server, context) {
     pingInterval: 30000,
     pingTimeout: 60000,
   });
+
+  // Attach Redis adapter so io.to(room).emit() fans out across all instances.
+  // Falls back to in-process adapter when Redis is not configured (dev/single-instance).
+  const pubClient = getPubClient();
+  const subClient = getSubClient();
+  if (pubClient && subClient) {
+    io.adapter(createAdapter(pubClient, subClient));
+    console.info('[socket.io] Redis adapter attached — multi-instance fan-out enabled');
+  } else {
+    console.info('[socket.io] No Redis configured — using in-process adapter (single instance only)');
+  }
 
   io.use((socket, next) => {
     const decoded = verifyRealtimeToken(socket.handshake.auth?.token);

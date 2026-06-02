@@ -71,6 +71,23 @@ class WalletNotifier extends StateNotifier<WalletState> {
     super.dispose();
   }
 
+  /// Hydrate points + tier from the /api/home aggregate.
+  /// Full transaction list is still fetched separately by the wallet tab.
+  void hydrateFromHomeData(Map<String, dynamic> walletData) {
+    if (_disposed) return;
+    final points = (walletData['points'] as num?)?.toInt() ?? state.points;
+    final tier = walletData['membershipTier'] as String? ?? state.tier;
+    final (progress, ptsToNext, nextTier) = _computeTier(points, tier);
+    state = state.copyWith(
+      points: points,
+      tier: tier,
+      tierProgress: progress,
+      pointsToNextTier: ptsToNext,
+      nextTier: nextTier,
+      isLoading: false,
+    );
+  }
+
   Future<void> fetchWallet() async {
     try {
       final data = await _backendService.getProfile();

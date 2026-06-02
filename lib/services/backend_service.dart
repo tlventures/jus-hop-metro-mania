@@ -48,6 +48,20 @@ class BackendService {
     return _getMap('/api/home', cacheKey: 'cache_home');
   }
 
+  // ── B4: Static catalog endpoints (CDN-cached server-side) ──────────────────
+
+  /// Fetch a static catalog type without auth (rewards/games/articles/surveys/quests/videos).
+  Future<Map<String, dynamic>> getCatalog(String type) {
+    return _getMap('/api/catalog/$type', cacheKey: 'cache_catalog_$type');
+  }
+
+  /// Fetch the per-user overlay (redeemed IDs, read IDs, etc.) to merge onto the catalog.
+  Future<Map<String, dynamic>> getMyCatalogState() {
+    return _getMap('/api/me/catalog-state', cacheKey: 'cache_my_catalog_state');
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+
   Future<Map<String, dynamic>> getProfile() {
     return _getMap('/api/profile', cacheKey: 'cache_profile');
   }

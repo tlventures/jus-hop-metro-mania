@@ -8,9 +8,18 @@ const { Firestore } = require('@google-cloud/firestore');
 const admin = require('firebase-admin');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
 const pino = require('pino');
 const pinoHttp = require('pino-http');
 const { z } = require('zod');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { getRedis, getPubClient, getSubClient, cacheGet, cacheSet, cacheDel } = require('./lib/redis');
+const {
+  trackCity,
+  startLeaderboardRefresher,
+  getMaterializedLeaderboard,
+  getUserRank,
+} = require('./lib/leaderboard');
 const {
   installPhase56Middleware,
   installPhase56Routes,
@@ -336,12 +345,25 @@ const storyCompleteSchema = z.object({
 // Rate limiters
 // ---------------------------------------------------------------------------
 
+// Build a Redis-backed store for rate-limit-redis if Redis is available.
+// Falls back to the default in-memory store so local dev is unaffected.
+function makeRateLimitStore(prefix) {
+  const redis = getRedis();
+  if (!redis) return undefined; // use default MemoryStore
+  return new RedisStore({
+    prefix,
+    // rate-limit-redis v4 sendCommand API
+    sendCommand: (...args) => redis.call(...args),
+  });
+}
+
 const claimLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
   keyGenerator: (req) => req.clientId || req.ip,
   standardHeaders: true,
   legacyHeaders: false,
+  store: makeRateLimitStore('rl:claim:'),
 });
 
 const generalLimiter = rateLimit({
@@ -350,6 +372,7 @@ const generalLimiter = rateLimit({
   keyGenerator: (req) => req.clientId || req.ip,
   standardHeaders: true,
   legacyHeaders: false,
+  store: makeRateLimitStore('rl:general:'),
 });
 
 // ---------------------------------------------------------------------------
@@ -444,7 +467,16 @@ function defaultUserState(clientId, firebaseUser = null) {
   });
 }
 
-async function getUserState(clientId, firebaseUser = null) {
+// ---------------------------------------------------------------------------
+// User-state helpers with Redis cache layer
+// Cache key: user:<clientId>  TTL: 5 s
+// The cache is bypassed (and invalidated) whenever firebaseUser is provided
+// (profile-repair path) or after any mutation.
+// ---------------------------------------------------------------------------
+
+const USER_CACHE_TTL = 5; // seconds
+
+async function _readUserStateFromFirestore(clientId, firebaseUser = null) {
   const ref = firestore.collection('metrosafar_users').doc(clientId);
   const snapshot = await ref.get();
 
@@ -471,6 +503,21 @@ async function getUserState(clientId, firebaseUser = null) {
   return buildDerivedProfile({ ...existing, ...repair });
 }
 
+async function getUserState(clientId, firebaseUser = null) {
+  // Skip cache on the profile-repair path (firebaseUser supplied)
+  if (!firebaseUser) {
+    const cached = await cacheGet(`user:${clientId}`);
+    if (cached) return cached;
+  }
+
+  const state = await _readUserStateFromFirestore(clientId, firebaseUser);
+  // Only cache when there was no repair write (to avoid stale-after-write)
+  if (!firebaseUser) {
+    await cacheSet(`user:${clientId}`, state, USER_CACHE_TTL);
+  }
+  return state;
+}
+
 async function saveUserState(clientId, nextState) {
   const ref = firestore.collection('metrosafar_users').doc(clientId);
   const payload = buildDerivedProfile({
@@ -478,6 +525,8 @@ async function saveUserState(clientId, nextState) {
     lastUpdated: new Date().toISOString(),
   });
   await ref.set(payload, { merge: true });
+  // Invalidate cache so the next read sees fresh state
+  await cacheDel(`user:${clientId}`);
   return payload;
 }
 
@@ -486,7 +535,8 @@ async function saveUserState(clientId, nextState) {
 // Throws an error with statusCode if the transaction fails.
 async function claimTransaction(clientId, cb) {
   const ref = firestore.collection('metrosafar_users').doc(clientId);
-  return firestore.runTransaction(async (txn) => {
+  const result = await firestore.runTransaction(async (txn) => {
+    // Always read from Firestore inside a transaction — never the cache.
     const snapshot = await txn.get(ref);
     const state = snapshot.exists
       ? buildDerivedProfile(snapshot.data())
@@ -499,6 +549,9 @@ async function claimTransaction(clientId, cb) {
     }
     return response;
   });
+  // Invalidate user cache after any committed transaction
+  await cacheDel(`user:${clientId}`);
+  return result;
 }
 
 function withRewardState(userState) {
@@ -532,8 +585,36 @@ function withGameState(userState) {
   };
 }
 
+/**
+ * Build the quest list for a given user state without a second Firestore read.
+ * Also handles the daily-reset side-effect detection (but does NOT write —
+ * writing is the caller's responsibility to avoid double-saves).
+ */
+function buildQuestsForState(userState) {
+  const today = new Date().toDateString();
+  const lastReset = userState.lastQuestResetAt;
+  const needsReset = !lastReset || new Date(lastReset).toDateString() !== today;
+  const midnight = new Date();
+  midnight.setHours(23, 59, 59, 999);
+  const effectiveCompleted = needsReset ? new Set() : new Set(userState.completedQuests || []);
+  return {
+    quests: catalog.quests.map(q => ({
+      ...q,
+      isCompleted: effectiveCompleted.has(q.id),
+      resetAt: midnight.toISOString(),
+    })),
+    needsReset,
+  };
+}
+
+/**
+ * Returns the full home-screen payload from a single user-state object.
+ * Covers: profile, streak, quests (with reset detection), wallet summary,
+ * games catalog, and featured videos — eliminating 4 separate API calls.
+ */
 function getHomePayload(userState) {
   const rewards = withRewardState(userState);
+  const { quests } = buildQuestsForState(userState);
 
   return {
     profile: {
@@ -544,6 +625,18 @@ function getHomePayload(userState) {
       pointsToNextTier: userState.pointsToNextTier,
       co2SavedKg: userState.co2SavedKg,
       treesEquivalent: userState.treesEquivalent,
+    },
+    streak: {
+      currentDay: userState.streakDay || 0,
+      longestStreak: userState.longestStreak || 0,
+      lastClaimedAt: userState.lastStreakClaimAt || null,
+      totalPoints: userState.points || 0,
+    },
+    quests,
+    wallet: {
+      points: userState.points || 0,
+      membershipTier: userState.membershipTier || 'Bronze',
+      transactions: (userState.walletTransactions || []).slice(0, 20),
     },
     games: catalog.games,
     featuredVideos: rewards.videos.slice(0, 2),
@@ -954,6 +1047,8 @@ const PUBLIC_API_ROUTES = [
   { method: 'GET',  pattern: /^\/v2\/cities/ },
   { method: 'POST', pattern: /^\/v2\/waitlist$/ },
   { method: 'POST', pattern: /^\/internal\/weekly-digest\/run$/ },
+  // Static catalog endpoints — CDN-cacheable, no auth needed (B4)
+  { method: 'GET',  pattern: /^\/catalog\/(rewards|games|articles|surveys|quests|videos)$/ },
 ];
 
 function isPublicApiRoute(req) {
@@ -1065,7 +1160,19 @@ app.get('/readyz', async (_req, res) => {
 app.get('/api/home', async (req, res, next) => {
   try {
     const userState = await getUserState(req.clientId, req.firebaseUser);
-    res.json(getHomePayload(userState));
+    const payload = getHomePayload(userState);
+
+    // Reset completed quests at day boundary (fire-and-forget, non-blocking)
+    const { needsReset } = buildQuestsForState(userState);
+    if (needsReset) {
+      saveUserState(req.clientId, {
+        ...userState,
+        completedQuests: [],
+        lastQuestResetAt: new Date().toISOString(),
+      }).catch(err => logger.warn({ err }, '/api/home quest-reset write failed'));
+    }
+
+    res.json(payload);
   } catch (error) {
     next(error);
   }
@@ -1664,6 +1771,7 @@ const ACTIVITY_POINT_RULES = {
   passport_viewed:        { base: 10, max: 10 },
 };
 const DAILY_POINT_CAP = 500;
+const TOP_N = 50; // max leaderboard entries served to clients
 
 function activityDescription(type, entityId) {
   const labels = {
@@ -1684,20 +1792,14 @@ function activityDescription(type, entityId) {
 app.get('/api/quests/today', async (req, res, next) => {
   try {
     const userState = await getUserState(req.clientId);
-    const today = new Date().toDateString();
-    const lastReset = userState.lastQuestResetAt;
-    const needsReset = !lastReset || new Date(lastReset).toDateString() !== today;
-
-    // Use live catalog (falls back to staticData defaults at startup)
-    const questDefs = catalog.quests;
-
-    const midnight = new Date();
-    midnight.setHours(23, 59, 59, 999);
-    const effectiveCompleted = needsReset ? new Set() : new Set(userState.completedQuests || []);
-    const quests = questDefs.map((q) => ({ ...q, isCompleted: effectiveCompleted.has(q.id), resetAt: midnight.toISOString() }));
+    const { quests, needsReset } = buildQuestsForState(userState);
 
     if (needsReset) {
-      await saveUserState(req.clientId, { ...userState, completedQuests: [], lastQuestResetAt: new Date().toISOString() });
+      await saveUserState(req.clientId, {
+        ...userState,
+        completedQuests: [],
+        lastQuestResetAt: new Date().toISOString(),
+      });
     }
 
     res.json({ quests });
@@ -1778,6 +1880,53 @@ app.post('/api/activity-events', claimLimiter, validate(activityEventSchema), as
   }
 });
 
+// ===========================================================================
+// STATIC CATALOG ENDPOINTS (B4)
+// Auth-free, CDN-cacheable.  No user state merged — clients fetch
+// /api/me/catalog-state separately and merge locally.
+// Listed in PUBLIC_API_ROUTES above so the auth gate is bypassed.
+// ===========================================================================
+
+const CATALOG_CACHE_SECONDS = 60;
+
+function setCatalogCacheHeaders(res) {
+  res.set('Cache-Control', `public, max-age=${CATALOG_CACHE_SECONDS}, s-maxage=${CATALOG_CACHE_SECONDS * 5}`);
+  res.set('Vary', 'Accept-Encoding');
+}
+
+app.get('/api/catalog/:type', (req, res) => {
+  const { type } = req.params;
+  if (!CATALOG_TYPES.includes(type)) {
+    return res.status(400).json({ error: `type must be one of: ${CATALOG_TYPES.join(', ')}` });
+  }
+  setCatalogCacheHeaders(res);
+  res.json({ type, items: catalog[type], count: catalog[type].length });
+});
+
+// ---------------------------------------------------------------------------
+// Per-user catalog state — the thin overlay the client merges onto the catalog
+// (redeemed IDs, read IDs, watched IDs, etc.)
+// ---------------------------------------------------------------------------
+
+app.get('/api/me/catalog-state', async (req, res, next) => {
+  try {
+    const userState = await getUserState(req.clientId);
+    res.json({
+      redeemedRewardIds:    userState.redeemedRewardIds    || [],
+      rewardRedemptions:    userState.rewardRedemptions    || {},
+      readArticleIds:       userState.readArticleIds       || [],
+      watchedVideoIds:      userState.watchedVideoIds      || [],
+      completedSurveys:     userState.completedSurveys     || [],
+      visitedLandmarkIds:   userState.visitedLandmarkIds   || [],
+      completedQuests:      userState.completedQuests      || [],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===========================================================================
+
 app.get('/api/wallet/transactions', async (req, res, next) => {
   try {
     const userState = await getUserState(req.clientId);
@@ -1802,32 +1951,67 @@ app.post('/api/waitlist', async (req, res, next) => {
 // Retention: score-to-beat trivia
 // ---------------------------------------------------------------------------
 
+// ── GET /api/games/trivia/rank
+// Returns caller's rank using Redis cache + Firestore count() aggregation.
+// No 500-doc scan; sub-millisecond for cached users.
 app.get('/api/games/trivia/rank', async (req, res, next) => {
   try {
     const profile = await getUserState(req.clientId);
-    const cityId = sanitizeCityId(req.query.cityId || profile.activeCityId);
-    res.json(await getTriviaRank(cityId, req.clientId));
+    const cityId  = sanitizeCityId(req.query.cityId || profile.activeCityId);
+    trackCity(cityId);
+
+    const rankData = await getUserRank(cityId, req.clientId);
+    if (!rankData) {
+      return res.json({ cityId, rank: null, score: 0, message: 'No score recorded yet' });
+    }
+    res.json({ cityId, ...rankData });
   } catch (error) {
     next(error);
   }
 });
 
+// ── POST /api/games/trivia/score — records score and triggers async leaderboard refresh
 app.post('/api/games/trivia/score', claimLimiter, validate(triviaScoreSchema), async (req, res, next) => {
   try {
     const rank = await recordTriviaScore(req.clientId, req.body);
+    const cityId = sanitizeCityId(req.body.cityId || '');
+    trackCity(cityId);
+    // Trigger an immediate refresh for this city (non-blocking)
+    if (cityId) getMaterializedLeaderboard(cityId).catch(() => {});
     res.json(rank);
   } catch (error) {
     next(error);
   }
 });
 
+// ── GET /api/games/trivia/leaderboard
+// Serves the pre-materialized doc (1 read, CDN-cacheable to 30 s).
+// Falls back to the legacy scan only if not yet materialized.
 app.get('/api/games/trivia/leaderboard', async (req, res, next) => {
   try {
-    const profile = await getUserState(req.clientId);
-    const cityId = sanitizeCityId(req.query.cityId || profile.activeCityId);
-    const limit = Math.max(1, Math.min(Number(req.query.limit || 10), 50));
+    const profile  = await getUserState(req.clientId);
+    const cityId   = sanitizeCityId(req.query.cityId || profile.activeCityId);
+    const limit    = Math.max(1, Math.min(Number(req.query.limit || 10), TOP_N));
+    trackCity(cityId);
+
+    const mat = await getMaterializedLeaderboard(cityId);
+    if (mat) {
+      const yourRank = await getUserRank(cityId, req.clientId);
+      // Allow CDN / browser to cache for up to 30s (refresher interval)
+      res.set('Cache-Control', 'public, max-age=30, s-maxage=30');
+      return res.json({
+        cityId,
+        leaderboard:  mat.topScores.slice(0, limit),
+        yourRank:     yourRank?.rank ?? null,
+        playerCount:  mat.playerCount,
+        updatedAt:    mat.updatedAt,
+        source:       'materialized',
+      });
+    }
+
+    // Fallback: legacy scan (first request before first materializer run)
     const rank = await getTriviaRank(cityId, req.clientId, limit);
-    res.json({ cityId, leaderboard: rank.topScores, yourRank: rank.rank, playerCount: rank.playerCount });
+    res.json({ cityId, leaderboard: rank.topScores, yourRank: rank.rank, playerCount: rank.playerCount, source: 'live' });
   } catch (error) {
     next(error);
   }
@@ -3212,6 +3396,11 @@ const server = http.createServer(app);
 const io = createPhase56Realtime(server, phase56Context);
 _installConvenienceSubscribes(io);
 startEventOrchestrator(io, logger);
+
+// Start leaderboard materializer — refreshes top-scores every 30s per city.
+// Seed initial city list from the in-memory registry.
+startLeaderboardRefresher(firestore, logger);
+for (const cityId of Object.keys(cityRegistry)) trackCity(cityId);
 
 server.listen(PORT, '0.0.0.0', () => {
   logger.info({ port: PORT }, 'MetroSafar backend listening');

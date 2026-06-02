@@ -75,6 +75,14 @@ class QuestsNotifier extends StateNotifier<List<Quest>> {
 
   QuestsNotifier(this._backendService) : super(Quest.defaults);
 
+  /// Hydrate from the /api/home aggregate — no extra network call.
+  void hydrateFromHomeData(List<Map<String, dynamic>> questsJson) {
+    if (!mounted) return;
+    if (questsJson.isNotEmpty) {
+      state = questsJson.map((q) => Quest.fromJson(q)).toList();
+    }
+  }
+
   Future<void> fetchQuests() async {
     try {
       final data = await _backendService.getQuestsToday();
