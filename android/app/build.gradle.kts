@@ -86,6 +86,10 @@ dependencies {
     // Flutter's deferred-component manager references Play Feature Delivery
     // classes during R8 minification even when no deferred modules are used.
     implementation("com.google.android.play:feature-delivery:2.1.0")
+
+    // Android 12+ Splash Screen API (animated launch icon shown immediately
+    // by the OS, before the Flutter engine boots).
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }
 
 flutter {
