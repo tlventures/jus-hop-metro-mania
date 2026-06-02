@@ -132,6 +132,44 @@ All on host project **`metrosafar-20260517-223707`** (#1009975908945, billing ON
 
 ---
 
+## 7a. 🚀 Play Store release checklist (what's left before launch)
+
+Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for store · 🟡 strongly recommended.
+
+### A. Signing & build
+- [ ] 🔴 **Generate an upload keystore** and create `android/key.properties`. Builds are currently **debug-signed** (`build.gradle.kts` falls back to the debug config), which Play **rejects**.
+- [ ] 🔴 **Build an AAB**, not an APK: `flutter build appbundle --release`. (Debug APKs installed on the test phone are *not* shippable.)
+- [ ] 🟡 Verify `targetSdk ≥ 35` (resolved via `flutter.targetSdkVersion` on Flutter 3.35 — confirm).
+
+### B. Ads (AdMob)
+- [ ] 🔴 Replace **Google TEST IDs** with real ones, or disable ads for launch. `adsEnabled` defaults **true**; app + unit IDs are Google's public test IDs → policy violation + zero revenue if shipped as-is.
+
+### C. Backend the shipped app talks to ⚠️ IMPORTANT
+- [ ] 🔴 **Resolve the backend-URL mismatch.** The app (`lib/config/api_config.dart`) points at `https://metrosafar-backend-682046427985.asia-south1.run.app` (the *old* prod backend, **not** updated this session). All of this session's backend work (catalog, redemptions, code pools, rate-limit split, CO₂ fix) was deployed to **`metrosafar-20260517-223707`** (`...-pxx5jjbiyq-...`). So in the currently-installed build, **My Redemptions / instant codes / live catalog will NOT work** — they hit the old backend.
+  - **Decide:** either (a) redeploy the updated code to the 682 backend's project, or (b) repoint `api_config.dart` to the pxx5jjbiyq backend, then rebuild. Until then the new features are admin-only.
+- [x] Catalog seeded + indexes created on the pxx5jjbiyq backend (done 3 Jun).
+- [ ] 🟡 Provision Memorystore (Redis) for the rate-limit store / cache / socket.io adapter (degrades gracefully without it).
+
+### D. Play Console submission requirements
+- [ ] 🟠 **Hosted privacy-policy URL** (public HTTPS). The in-app legal sheet does **not** satisfy the Data Safety form.
+- [ ] 🟠 **Data Safety form** — declare collection of location, camera, FCM token, account data.
+- [ ] 🟠 **Foreground-service declaration** (media playback — used by audio stories).
+- [ ] 🟠 **Content rating** questionnaire.
+- [ ] 🟠 **Store listing assets** — title, short/full description, **phone + tablet/foldable screenshots**, feature graphic, 512px icon.
+- [ ] 🟠 **Prominent disclosure** in-app for location + camera permissions.
+- [ ] 🟡 Roll out via **Internal testing → Closed → Production** tracks.
+
+### E. Rewards actually deliver value
+- [ ] 🟠 Load **real coupon supply**: voucher **code pools** (admin 🎟 uploader), **affiliate links**, or partner deals — otherwise redemptions hand out nothing.
+- [ ] 🟡 Confirm the **fulfillment loop end-to-end**: FCM token storage + the "redemption fulfilled" push + My Redemptions code display.
+
+### F. Code hygiene (non-blocking but do before launch)
+- [ ] 🟡 Remove unused `google_maps_flutter` dependency (declared, never used → bloats the AAB).
+- [ ] 🟡 Delete dead code: `lib/domain/` (0 imports), `lib/providers/` (0 imports), `lib/utils/theme.dart` (0 imports).
+- [ ] 🟡 Add money-path tests (redeem balance/limit/daily-cap) — currently only 3 test files.
+
+---
+
 ## 8. Pending / next steps
 
 ### ✅ Completed 3 June 2026
