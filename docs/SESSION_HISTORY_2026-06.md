@@ -134,9 +134,14 @@ All on host project **`metrosafar-20260517-223707`** (#1009975908945, billing ON
 
 ## 8. Pending / next steps
 
-- [ ] **Remove `ADMIN_API_KEY`** from the backend env (security).
-- [ ] **Run catalog seed** against prod: `node backend/scripts/seed-catalog.js --write` (else app falls back to bundled `db.json` and admin edits to rewards/games won't show).
-- [ ] **Firestore composite index** for `redemptions(userId ASC, createdAt DESC)` (My Redemptions query) and verify leaderboard indexes.
+### ✅ Completed 3 June 2026
+- [x] **Removed `ADMIN_API_KEY`** from the backend env (revision `00011-sbf`). Verified the key is now rejected. Admin access is solely Firebase + RBAC. Temp key file shredded.
+- [x] **Catalog seeded** to `metrosafar-20260517-223707` Firestore — 38 docs with exact db.json IDs, via `scripts/seed-via-rest.js` (Firestore REST + gcloud owner token; local Admin-SDK ADC lacked Firestore write perms). Backend `onSnapshot` picked it up; `/api/catalog/rewards` confirms 16 rewards live.
+- [x] **Firestore composite indexes created** (async build) and recorded in `firestore.indexes.json`:
+  - `redemptions(userId ASC, createdAt DESC)` — My Redemptions query
+  - `redemptions(status ASC, createdAt DESC)` — admin redemptions list
+
+### Still pending
 - [ ] **Provision Memorystore (Redis)** + VPC connector to activate the rate-limit store, user cache, and socket.io adapter (all degrade gracefully without it).
 - [ ] **Close the redemption loop fully:** confirm FCM token storage + the My Redemptions push end-to-end.
 - [ ] **Play Store release prep** (separate track): real signing keystore (still debug-signed), real AdMob IDs (currently Google test IDs), Data Safety form, hosted privacy policy. See earlier launch-readiness assessment.
