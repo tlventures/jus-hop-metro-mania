@@ -74,6 +74,11 @@ class BackendService {
     return _getMap('/api/me/catalog-state', cacheKey: 'cache_my_catalog_state');
   }
 
+  /// Fetch the user's redemption history (My Redemptions screen).
+  Future<Map<String, dynamic>> getMyRedemptions() {
+    return _getMap('/api/me/redemptions', cacheKey: 'cache_my_redemptions');
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getProfile() {

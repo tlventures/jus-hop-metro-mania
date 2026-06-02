@@ -6,6 +6,7 @@ import '../design_system/components/ad_banner.dart';
 import '../design_system/components/offline_banner.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/wallet/presentation/wallet_screen.dart';
+import '../features/wallet/presentation/my_redemptions_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/play/presentation/play_hub_screen.dart';
 import '../features/learn/presentation/learn_hub_screen.dart';
@@ -93,6 +94,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/learn',
       builder: (context, state) => const LearnHubScreen(),
+    ),
+    GoRoute(
+      path: '/my-redemptions',
+      builder: (context, state) => const MyRedemptionsScreen(),
     ),
     GoRoute(
       path: '/booking',

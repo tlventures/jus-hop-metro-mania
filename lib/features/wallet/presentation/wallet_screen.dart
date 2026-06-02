@@ -8,6 +8,7 @@ import '../../../design_system/tokens/typography.dart';
 import '../../../domain/entities/activity_event.dart';
 import '../application/wallet_provider.dart';
 import '../application/rewards_provider.dart';
+import 'my_redemptions_screen.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -719,11 +720,21 @@ class _RedeemSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Redeem Rewards',
-          style: AppTypography.titleMedium.copyWith(
-            color: colorScheme.onSurface,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Redeem Rewards',
+              style: AppTypography.titleMedium.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => context.push('/my-redemptions'),
+              icon: const Icon(Icons.receipt_long, size: 18),
+              label: const Text('My Redemptions'),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.s4),
         // DefaultTabController owns the lifecycle — no manual disposal needed.
@@ -826,15 +837,26 @@ class _RedeemSection extends ConsumerWidget {
                   final success = await ref
                       .read(walletProvider.notifier)
                       .redeemReward(rewardId, cost);
+                  if (success) {
+                    // Refresh lists so the new redemption + redeemed state show.
+                    ref.invalidate(myRedemptionsProvider);
+                    ref.read(rewardsProvider.notifier).fetchRewards();
+                  }
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
                           success
-                              ? '🎉 "$title" redeemed! -$cost points'
+                              ? '🎉 "$title" redeemed! Check My Redemptions for your code.'
                               : 'Redemption failed. Please try again.',
                         ),
                         behavior: SnackBarBehavior.floating,
+                        action: success
+                            ? SnackBarAction(
+                                label: 'View',
+                                onPressed: () => context.push('/my-redemptions'),
+                              )
+                            : null,
                       ),
                     );
                   }

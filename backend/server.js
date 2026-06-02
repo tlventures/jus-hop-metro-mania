@@ -1362,22 +1362,38 @@ app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) 
     const cost = Number(reward.points || 0);
     const perUserLimit = Number(reward.perUserLimit ?? 1);  // default once per user
     const globalStock  = reward.stock != null ? Number(reward.stock) : null; // null = unlimited
+    // Fulfillment type: how the user actually receives the reward.
+    //   instant_code  → pull a pre-loaded voucher code from the pool (instant)
+    //   affiliate_link→ deliver a link immediately (instant)
+    //   manual        → admin fulfills later via the queue (default / legacy)
+    const fulfillmentType = reward.fulfillmentType || 'manual';
 
-    // If global stock is managed, check it before entering user transaction
     if (globalStock !== null && globalStock <= 0) {
       res.status(400).json({ error: 'Reward is out of stock' }); return;
     }
 
-    // Pre-generate the redemption record ref so it's written atomically
-    // inside the same transaction that deducts points.
     const redemptionId  = `rdm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const redemptionRef = firestore.collection('redemptions').doc(redemptionId);
 
+    // Query for one available code up-front (used only for instant_code).
+    const codesQuery = rewardRef
+      ? rewardRef.collection('codes').where('assigned', '==', false).limit(1)
+      : null;
+
     const response = await claimTransaction(req.clientId, async (txn, state) => {
-      // Per-user redemption count
-      const redemptions = state.rewardRedemptions || {};          // { [rewardId]: count }
+      // ---- ALL READS FIRST (Firestore requires reads before writes) ----
+      const redemptions = state.rewardRedemptions || {};
       const userCount   = Number(redemptions[reward.id] || 0);
 
+      let stockSnap = null;
+      if (rewardRef && globalStock !== null) stockSnap = await txn.get(rewardRef);
+
+      let codeSnap = null;
+      if (fulfillmentType === 'instant_code' && codesQuery) {
+        codeSnap = await txn.get(codesQuery);
+      }
+
+      // ---- VALIDATION ----
       if (userCount >= perUserLimit) {
         const msg = perUserLimit === 1
           ? 'You have already redeemed this reward'
@@ -1387,24 +1403,39 @@ app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) 
       if (state.points < cost) {
         const err = new Error('Not enough points'); err.statusCode = 400; throw err;
       }
-
-      // Decrement global stock atomically via separate Firestore doc update
-      if (rewardRef && globalStock !== null) {
-        const stockSnap = await txn.get(rewardRef);
-        const currentStock = Number(stockSnap.data()?.stock ?? 0);
-        if (currentStock <= 0) {
-          const err = new Error('Reward is out of stock'); err.statusCode = 400; throw err;
-        }
-        txn.update(rewardRef, { stock: admin.firestore.FieldValue.increment(-1), _updatedAt: new Date() });
+      if (stockSnap && Number(stockSnap.data()?.stock ?? 0) <= 0) {
+        const err = new Error('Reward is out of stock'); err.statusCode = 400; throw err;
       }
 
-      const nextRedemptions = { ...redemptions, [reward.id]: userCount + 1 };
-      // Keep legacy redeemedRewardIds for backward compatibility (single-redeem view)
-      const redeemed = new Set(state.redeemedRewardIds || []);
-      if (perUserLimit === 1) redeemed.add(reward.id);
+      // Resolve instant fulfillment
+      let status = 'pending';
+      let fulfillmentCode = null;
+      let assignedCodeRef = null;
+      if (fulfillmentType === 'instant_code') {
+        if (!codeSnap || codeSnap.empty) {
+          const err = new Error('This reward is temporarily unavailable — please try again soon.');
+          err.statusCode = 409; throw err;   // no code in pool → roll back, no points lost
+        }
+        assignedCodeRef = codeSnap.docs[0].ref;
+        fulfillmentCode = codeSnap.docs[0].data().code;
+        status = 'fulfilled';
+      } else if (fulfillmentType === 'affiliate_link') {
+        fulfillmentCode = reward.affiliateUrl || reward.fulfillmentCode || null;
+        status = fulfillmentCode ? 'fulfilled' : 'pending';
+      }
 
-      // Persist a redemption record for the admin fulfillment queue (2a–2f).
-      // status: 'pending' → admin attaches a fulfillmentCode / marks 'fulfilled'.
+      // ---- WRITES ----
+      if (stockSnap) {
+        txn.update(rewardRef, { stock: admin.firestore.FieldValue.increment(-1), _updatedAt: new Date() });
+      }
+      if (assignedCodeRef) {
+        txn.update(assignedCodeRef, {
+          assigned: true, assignedTo: req.clientId,
+          assignedAt: new Date().toISOString(), redemptionId,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
       txn.set(redemptionRef, {
         id: redemptionId,
         rewardId: reward.id,
@@ -1415,13 +1446,18 @@ app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) 
         userName: state.name || '',
         userEmail: state.email || '',
         pointsCost: cost,
-        status: 'pending',          // pending | fulfilled | cancelled
-        fulfillmentCode: null,      // voucher code / link — set by admin
+        fulfillmentType,
+        status,
+        fulfillmentCode,
         fulfillmentNote: null,
-        createdAt: new Date().toISOString(),
-        fulfilledAt: null,
-        fulfilledBy: null,
+        createdAt: nowIso,
+        fulfilledAt: status === 'fulfilled' ? nowIso : null,
+        fulfilledBy: status === 'fulfilled' ? 'auto' : null,
       });
+
+      const nextRedemptions = { ...redemptions, [reward.id]: userCount + 1 };
+      const redeemed = new Set(state.redeemedRewardIds || []);
+      if (perUserLimit === 1) redeemed.add(reward.id);
 
       const next = {
         ...state,
@@ -1434,7 +1470,9 @@ app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) 
         response: {
           points: next.points,
           redemptionId,
-          status: 'pending',
+          status,
+          fulfillmentType,
+          fulfillmentCode,           // present immediately for instant types
           reward: { ...reward, redeemed: true, redemptionCount: userCount + 1 },
         },
       };
@@ -1974,6 +2012,37 @@ app.get('/api/me/catalog-state', async (req, res, next) => {
       visitedLandmarkIds:   userState.visitedLandmarkIds   || [],
       completedQuests:      userState.completedQuests      || [],
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/me/redemptions — the user's redemption history (My Redemptions screen)
+app.get('/api/me/redemptions', async (req, res, next) => {
+  try {
+    const snap = await firestore.collection('redemptions')
+      .where('userId', '==', req.clientId)
+      .orderBy('createdAt', 'desc')
+      .limit(100)
+      .get();
+    const items = snap.docs.map(d => {
+      const r = d.data();
+      return {
+        id: r.id,
+        rewardTitle: r.rewardTitle,
+        rewardCategory: r.rewardCategory,
+        discount: r.discount,
+        pointsCost: r.pointsCost,
+        status: r.status,
+        fulfillmentType: r.fulfillmentType || 'manual',
+        // Only expose the code once the redemption is fulfilled.
+        fulfillmentCode: r.status === 'fulfilled' ? r.fulfillmentCode : null,
+        fulfillmentNote: r.fulfillmentNote || null,
+        createdAt: r.createdAt,
+        fulfilledAt: r.fulfilledAt,
+      };
+    });
+    res.json({ redemptions: items, count: items.length });
   } catch (error) {
     next(error);
   }
@@ -2651,6 +2720,10 @@ const catalogRewardSchema = z.object({
   sortOrder:    z.number().int().min(0).optional().default(0),
   stock:        z.number().int().min(0).nullable().optional().default(null),
   perUserLimit: z.number().int().min(1).max(1000).optional().default(1),
+  // How the user receives the reward.
+  fulfillmentType: z.enum(['manual', 'instant_code', 'affiliate_link']).optional().default('manual'),
+  // For affiliate_link rewards — the URL delivered on redemption.
+  affiliateUrl: z.string().trim().max(500).optional().nullable().default(null),
 });
 
 const catalogGameSchema = z.object({
@@ -2933,7 +3006,90 @@ app.patch('/api/admin/redemptions/:id', requireAdmin, validate(redemptionUpdateS
       ip: req.ip, ua: req.get('user-agent'),
     });
 
+    // Notify the user when their redemption becomes fulfilled (best-effort).
+    if (patch.status === 'fulfilled' && before.status !== 'fulfilled') {
+      notifyRedemptionFulfilled(before.userId, before.rewardTitle)
+        .catch(e => logger.warn({ err: e }, 'Redemption fulfilled push failed'));
+    }
+
     res.json({ id: req.params.id, ...before, ...patch });
+  } catch (err) { next(err); }
+});
+
+// Best-effort FCM push to a user when a redemption is fulfilled.
+async function notifyRedemptionFulfilled(userId, rewardTitle) {
+  if (!userId) return;
+  const userSnap = await firestore.collection('metrosafar_users').doc(userId).get();
+  const token = userSnap.exists ? userSnap.data().fcmToken : null;
+  if (!token) return;
+  await admin.messaging().send({
+    token,
+    notification: {
+      title: '🎁 Your reward is ready!',
+      body: `${rewardTitle || 'Your reward'} has been fulfilled — tap to view your code.`,
+    },
+    data: { type: 'redemption_fulfilled', screen: 'my_redemptions' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ADMIN — reward code pools (instant_code fulfillment)
+// Upload a batch of voucher codes; redeem auto-assigns one per redemption.
+// ---------------------------------------------------------------------------
+
+const codeUploadSchema = z.object({
+  codes: z.array(z.string().trim().min(1).max(200)).min(1).max(5000),
+});
+
+// POST /api/admin/catalog/rewards/:id/codes — bulk-add voucher codes
+app.post('/api/admin/catalog/rewards/:id/codes', requireAdmin, validate(codeUploadSchema), async (req, res, next) => {
+  try {
+    const rewardRef = firestore.collection('catalog_rewards').doc(req.params.id);
+    const rewardSnap = await rewardRef.get();
+    if (!rewardSnap.exists) return res.status(404).json({ error: 'Reward not found' });
+
+    // De-dup against the input; write in batches of 450 (Firestore limit 500).
+    const unique = [...new Set(req.body.codes.map(c => c.trim()).filter(Boolean))];
+    let written = 0;
+    for (let i = 0; i < unique.length; i += 450) {
+      const batch = firestore.batch();
+      for (const code of unique.slice(i, i + 450)) {
+        const ref = rewardRef.collection('codes').doc();
+        batch.set(ref, {
+          code, assigned: false, assignedTo: null, assignedAt: null,
+          redemptionId: null, createdAt: new Date().toISOString(),
+        });
+        written++;
+      }
+      await batch.commit();
+    }
+
+    await appendAudit({
+      actor: req.admin.uid, actorEmail: req.admin.email, role: req.admin.role,
+      action: 'reward.codes.upload', after: { rewardId: req.params.id, count: written },
+      ip: req.ip, ua: req.get('user-agent'),
+    });
+    res.status(201).json({ rewardId: req.params.id, added: written });
+  } catch (err) { next(err); }
+});
+
+// GET /api/admin/catalog/rewards/:id/codes — availability summary (+ recent sample)
+app.get('/api/admin/catalog/rewards/:id/codes', requireAdmin, async (req, res, next) => {
+  try {
+    const codesRef = firestore.collection('catalog_rewards').doc(req.params.id).collection('codes');
+    const [availSnap, totalSnap] = await Promise.all([
+      codesRef.where('assigned', '==', false).count().get().catch(() => null),
+      codesRef.count().get().catch(() => null),
+    ]);
+    // Fallback if count() unavailable (emulator)
+    let available = availSnap?.data().count;
+    let total = totalSnap?.data().count;
+    if (available === undefined || total === undefined) {
+      const all = await codesRef.limit(5000).get();
+      total = all.size;
+      available = all.docs.filter(d => d.data().assigned === false).length;
+    }
+    res.json({ rewardId: req.params.id, total, available, assigned: total - available });
   } catch (err) { next(err); }
 });
 
