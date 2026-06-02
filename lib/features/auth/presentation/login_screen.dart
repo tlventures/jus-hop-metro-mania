@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:metrosafar/design_system/tokens/colors.dart';
+import 'package:metrosafar/design_system/components/brand_logo.dart';
 import 'package:metrosafar/design_system/tokens/spacing.dart';
 import 'package:metrosafar/design_system/tokens/typography.dart';
 import '../../../services/auth_service.dart';
@@ -142,26 +142,18 @@ class _LoginScreenState extends State<LoginScreen>
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s6),
+            child: ConstrainedBox(
+              // Cap width so the form stays centered on tablets / foldables.
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
               const SizedBox(height: AppSpacing.s8),
-              // Logo / brand
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.gradientStart, AppColors.gradientEnd],
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Text('🚇', style: TextStyle(fontSize: 40)),
-                ),
-              ),
+              // Logo / brand — consistent with launcher icon & onboarding
+              const MetroSafarLogo(size: 80),
               const SizedBox(height: AppSpacing.s4),
               Text(
                 'MetroSafar',
@@ -247,7 +239,9 @@ class _LoginScreenState extends State<LoginScreen>
                   ],
                 ),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

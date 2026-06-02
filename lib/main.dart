@@ -17,36 +17,94 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app/router.dart' as router_module;
 import 'core/city/city_theme_provider.dart';
 import 'core/city/current_city_provider.dart';
+import 'design_system/theme.dart';
+import 'features/splash/presentation/splash_screen.dart';
 import 'services/connectivity_watcher.dart';
 import 'services/backend_service.dart';
 import 'services/localization_service.dart';
 import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-  };
   ErrorWidget.builder = (_) => const _ProductionErrorFallback();
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
-  await initializeServices();
-  _wireAuthBoundServices();
-  await router_module.initializeRouter();
-  ConnectivityWatcher.instance.start(BackendService());
-  unawaited(MobileAds.instance.initialize());
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Draw under the system bars so branded backgrounds are full-bleed
+  // (eliminates the white band above the navigation bar).
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // Run immediately so the animated splash shows on the first frame; all
+  // heavy initialisation runs inside BootstrapApp while the splash is visible.
+  runApp(const BootstrapApp());
+}
 
-  runApp(ProviderScope(child: const MetroSafarApp()));
+/// Performs all async startup work (Firebase, services, ads, router) while an
+/// animated [SplashScreen] is shown, then swaps in the real app. Keeps launch
+/// responsive on slower/older devices instead of a frozen white screen.
+class BootstrapApp extends StatefulWidget {
+  const BootstrapApp({super.key});
+
+  @override
+  State<BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<BootstrapApp> {
+  bool _ready = false;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    if (mounted) setState(() => _error = null);
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+
+      await initializeServices();
+      _wireAuthBoundServices();
+      await router_module.initializeRouter();
+      ConnectivityWatcher.instance.start(BackendService());
+      unawaited(MobileAds.instance.initialize());
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+
+      if (mounted) setState(() => _ready = true);
+    } catch (e, st) {
+      debugPrint('Bootstrap failed: $e\n$st');
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.system,
+        home: SplashScreen(
+          error: _error,
+          onRetry: _error != null ? _boot : null,
+        ),
+      );
+    }
+    return ProviderScope(child: const MetroSafarApp());
+  }
 }
 
 class _ProductionErrorFallback extends StatelessWidget {
