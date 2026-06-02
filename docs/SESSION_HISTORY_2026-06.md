@@ -144,10 +144,10 @@ Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for s
 ### B. Ads (AdMob)
 - [ ] 🔴 Replace **Google TEST IDs** with real ones, or disable ads for launch. `adsEnabled` defaults **true**; app + unit IDs are Google's public test IDs → policy violation + zero revenue if shipped as-is.
 
-### C. Backend the shipped app talks to ⚠️ IMPORTANT
-- [ ] 🔴 **Resolve the backend-URL mismatch.** The app (`lib/config/api_config.dart`) points at `https://metrosafar-backend-682046427985.asia-south1.run.app` (the *old* prod backend, **not** updated this session). All of this session's backend work (catalog, redemptions, code pools, rate-limit split, CO₂ fix) was deployed to **`metrosafar-20260517-223707`** (`...-pxx5jjbiyq-...`). So in the currently-installed build, **My Redemptions / instant codes / live catalog will NOT work** — they hit the old backend.
-  - **Decide:** either (a) redeploy the updated code to the 682 backend's project, or (b) repoint `api_config.dart` to the pxx5jjbiyq backend, then rebuild. Until then the new features are admin-only.
+### C. Backend the shipped app talks to ✅ RESOLVED (3 Jun, v1.0.7+8)
+- [x] **Repointed `api_config.dart`** → `https://metrosafar-backend-pxx5jjbiyq-el.a.run.app` (the updated backend in `metrosafar-20260517-223707`). WebSocket (`realtime_service.dart`) follows automatically. App now uses live catalog + redemptions + code pools.
 - [x] Catalog seeded + indexes created on the pxx5jjbiyq backend (done 3 Jun).
+- ⚠️ **Data note:** the new backend has its **own Firestore** (separate from the old 682 backend), so existing test-user state (points/progress) does **not** carry over — users start fresh on first call. Fine for testing; if the 682 backend held real user data, plan a migration before public launch.
 - [ ] 🟡 Provision Memorystore (Redis) for the rate-limit store / cache / socket.io adapter (degrades gracefully without it).
 
 ### D. Play Console submission requirements

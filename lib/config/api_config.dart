@@ -4,8 +4,10 @@ class ApiConfig {
   static const String _envBaseUrl = String.fromEnvironment(
     'METROSAFAR_API_BASE_URL',
   );
+  // Backend in project metrosafar-20260517-223707 — runs the current code
+  // (live catalog, redemptions, code pools, rate-limit split, CO₂ fix).
   static const String _productionBaseUrl =
-      'https://metrosafar-backend-682046427985.asia-south1.run.app';
+      'https://metrosafar-backend-pxx5jjbiyq-el.a.run.app';
 
   static String get baseUrl {
     if (_envBaseUrl.isNotEmpty) {
