@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/backend_service.dart';
+import '../../home/application/home_provider.dart';
+import '../../wallet/application/wallet_provider.dart';
 
 class GameRecord {
   final String id;
@@ -101,7 +103,9 @@ class GamesNotifier extends StateNotifier<List<GameRecord>> {
     ),
   ];
 
-  GamesNotifier(this._backendService) : super(List.of(_catalog));
+  final Ref _ref;
+
+  GamesNotifier(this._backendService, this._ref) : super(List.of(_catalog));
 
   Future<void> fetchScores() async {
     try {
@@ -131,6 +135,8 @@ class GamesNotifier extends StateNotifier<List<GameRecord>> {
   }) async {
     Map<String, dynamic>? result;
     try {
+      // Single round-trip — the server now auto-completes the 'play_game'
+      // quest and records trivia rank, so no separate calls are needed.
       result = await _backendService.completeGame(
         gameId: gameId,
         score: score,
@@ -139,24 +145,31 @@ class GamesNotifier extends StateNotifier<List<GameRecord>> {
         questionsAnswered: questionsAnswered,
         streak: streak,
       );
-      // Game completed — also mark the play_game daily quest done
-      try {
-        await _backendService.completeQuest('play_game');
-      } catch (_) {}
     } catch (e) {
       debugPrint('GamesNotifier.updateGameScore error: $e');
+      // Server failed — do NOT optimistically credit; surface nothing.
+      return null;
     }
 
-    state =
-        state.map((game) {
-          if (game.id == gameId) {
-            return game.copyWith(
-              bestScore: score > game.bestScore ? score : game.bestScore,
-              lastPlayedAt: DateTime.now(),
-            );
-          }
-          return game;
-        }).toList();
+    // Server-authoritative: only update local state from the confirmed result.
+    final serverBest = (result['gameScore'] is Map)
+        ? (result['gameScore']['score'] as num?)?.toInt()
+        : null;
+    state = state.map((game) {
+      if (game.id == gameId) {
+        return game.copyWith(
+          bestScore: serverBest ?? game.bestScore,
+          lastPlayedAt: DateTime.now(),
+        );
+      }
+      return game;
+    }).toList();
+
+    // Push the server's authoritative point total to the wallet, surface the
+    // daily-cap flag, and refresh Home so balances stay in sync across screens.
+    _ref.read(walletProvider.notifier).applyEarnResult(result);
+    _ref.read(homeProvider.notifier).invalidate();
+
     return result;
   }
 
@@ -171,7 +184,7 @@ final gamesProvider = StateNotifierProvider<GamesNotifier, List<GameRecord>>((
   ref,
 ) {
   final backendService = ref.watch(backendServiceProvider);
-  return GamesNotifier(backendService);
+  return GamesNotifier(backendService, ref);
 });
 
 final totalGameScoreProvider = Provider<int>((ref) {

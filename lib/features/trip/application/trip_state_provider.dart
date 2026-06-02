@@ -158,15 +158,29 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
       // Award ride-completed event
       final result = await _backendService.logActivityEvent(type: 'ride_completed');
       final pts = (result['pointsAwarded'] as num?)?.toInt() ?? 0;
+      final capReached = result['dailyCapReached'] == true ||
+          result['reason'] == 'daily_cap_reached';
       final outboxCount = await _backendService.outboxCount();
+
+      final String message;
+      if (data['queued'] == true) {
+        message = 'Trip end saved offline — will sync automatically.';
+      } else if (capReached) {
+        final cap = (result['dailyCap'] as num?)?.toInt() ?? 500;
+        message =
+            'Trip complete! You\'ve hit today\'s $cap-point limit — rides still '
+            'count, and points reset tomorrow.';
+      } else {
+        message =
+            'Trip complete! +${state.pointsEarnedThisRide + pts} pts earned this ride.';
+      }
+
       state = state.copyWith(
         isLoading: false,
         clearActiveTrip: data['queued'] != true,
         elapsed: Duration.zero,
         pointsEarnedThisRide: state.pointsEarnedThisRide + pts,
-        statusMessage: data['queued'] == true
-            ? 'Trip end saved offline — will sync automatically.'
-            : 'Trip complete! +${state.pointsEarnedThisRide + pts} pts earned this ride.',
+        statusMessage: message,
         outboxCount: outboxCount,
       );
     } catch (error) {

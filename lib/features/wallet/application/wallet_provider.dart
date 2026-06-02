@@ -13,6 +13,12 @@ class WalletState {
   final List<WalletTransaction> transactions;
   final bool transactionsLoading;
 
+  /// True when the most recent earn hit the daily point cap. UI should show
+  /// "daily limit reached" instead of a (zero) points-earned toast.
+  final bool dailyCapReached;
+  final int dailyEarned;
+  final int dailyCap;
+
   const WalletState({
     this.points = 0,
     this.tier = 'Bronze',
@@ -22,6 +28,9 @@ class WalletState {
     this.isLoading = true,
     this.transactions = const [],
     this.transactionsLoading = false,
+    this.dailyCapReached = false,
+    this.dailyEarned = 0,
+    this.dailyCap = 500,
   });
 
   String get tierEmoji {
@@ -45,6 +54,9 @@ class WalletState {
     bool? isLoading,
     List<WalletTransaction>? transactions,
     bool? transactionsLoading,
+    bool? dailyCapReached,
+    int? dailyEarned,
+    int? dailyCap,
   }) {
     return WalletState(
       points: points ?? this.points,
@@ -55,6 +67,9 @@ class WalletState {
       isLoading: isLoading ?? this.isLoading,
       transactions: transactions ?? this.transactions,
       transactionsLoading: transactionsLoading ?? this.transactionsLoading,
+      dailyCapReached: dailyCapReached ?? this.dailyCapReached,
+      dailyEarned: dailyEarned ?? this.dailyEarned,
+      dailyCap: dailyCap ?? this.dailyCap,
     );
   }
 }
@@ -131,8 +146,10 @@ class WalletNotifier extends StateNotifier<WalletState> {
   Future<bool> redeemReward(String rewardId, int cost) async {
     if (state.points < cost) return false;
     try {
-      await _backendService.redeemReward(rewardId);
-      final newPoints = state.points - cost;
+      final result = await _backendService.redeemReward(rewardId);
+      // Trust the server's returned balance instead of local subtraction.
+      final serverPoints = (result['points'] as num?)?.toInt();
+      final newPoints = serverPoints ?? (state.points - cost);
       final (progress, ptsToNext, nextTier) = _computeTier(newPoints, state.tier);
       state = state.copyWith(
         points: newPoints,
@@ -158,6 +175,49 @@ class WalletNotifier extends StateNotifier<WalletState> {
       pointsToNextTier: ptsToNext,
       nextTier: nextTier,
     );
+  }
+
+  /// Apply the AUTHORITATIVE result of any earn/redeem call.
+  ///
+  /// Prefers the server's `totalPoints` over local arithmetic so the balance
+  /// never drifts (fixes optimistic-vs-server mismatch & cross-screen
+  /// staleness), and captures the daily-cap flag so the UI can surface it.
+  void applyEarnResult(Map<String, dynamic>? result) {
+    if (_disposed || result == null) return;
+
+    final serverTotal = (result['totalPoints'] as num?)?.toInt() ??
+        (result['points'] as num?)?.toInt();
+
+    final capReached = result['dailyCapReached'] == true ||
+        result['reason'] == 'daily_cap_reached';
+    final dailyEarned = (result['dailyEarned'] as num?)?.toInt();
+    final dailyCap = (result['dailyCap'] as num?)?.toInt();
+
+    if (serverTotal != null) {
+      final (progress, ptsToNext, nextTier) =
+          _computeTier(serverTotal, state.tier);
+      state = state.copyWith(
+        points: serverTotal,
+        tierProgress: progress,
+        pointsToNextTier: ptsToNext,
+        nextTier: nextTier,
+        dailyCapReached: capReached,
+        dailyEarned: dailyEarned,
+        dailyCap: dailyCap,
+      );
+    } else {
+      state = state.copyWith(
+        dailyCapReached: capReached,
+        dailyEarned: dailyEarned,
+        dailyCap: dailyCap,
+      );
+    }
+  }
+
+  /// Clear the one-shot daily-cap flag after the UI has shown it.
+  void clearDailyCapFlag() {
+    if (_disposed || !state.dailyCapReached) return;
+    state = state.copyWith(dailyCapReached: false);
   }
 
   // Must match server.js getTier() / getNextTier() thresholds:

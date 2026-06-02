@@ -18,6 +18,20 @@ class BackendAuthException implements Exception {
   String toString() => message;
 }
 
+/// Thrown on HTTP 429 so the UI can show a friendly "slow down" message and
+/// optionally back off instead of surfacing a scary generic error.
+class BackendRateLimitException implements Exception {
+  final String message;
+  final int retryAfterSeconds;
+  const BackendRateLimitException({
+    this.message = "You're going a little fast — try again in a moment.",
+    this.retryAfterSeconds = 5,
+  });
+
+  @override
+  String toString() => message;
+}
+
 class BackendService {
   final http.Client _client;
 
@@ -690,8 +704,15 @@ class BackendService {
       if (response.statusCode == 401) {
         throw const BackendAuthException();
       }
+      if (response.statusCode == 429) {
+        throw BackendRateLimitException(
+          retryAfterSeconds: _retryAfter(response),
+        );
+      }
       throw Exception('Request failed with ${response.statusCode}');
     } on BackendAuthException {
+      rethrow;
+    } on BackendRateLimitException {
       rethrow;
     } catch (_) {
       final cached = prefs.getString(cacheKey);
@@ -727,6 +748,11 @@ class BackendService {
       if (response.statusCode == 401) {
         throw const BackendAuthException();
       }
+      if (response.statusCode == 429) {
+        throw BackendRateLimitException(
+          retryAfterSeconds: _retryAfter(response),
+        );
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
           response.body.isNotEmpty ? response.body : 'Request failed',
@@ -743,7 +769,10 @@ class BackendService {
 
       return {};
     } catch (error) {
-      if (queueOffline && error is! BackendAuthException) {
+      // Don't queue auth or rate-limit failures — only genuine connectivity ones.
+      if (queueOffline &&
+          error is! BackendAuthException &&
+          error is! BackendRateLimitException) {
         await Outbox().enqueue(
           PendingMutation(
             id: idempotencyKey,
@@ -763,6 +792,13 @@ class BackendService {
       }
       rethrow;
     }
+  }
+
+  /// Parse the Retry-After header (seconds) from a 429 response; default 5s.
+  int _retryAfter(http.Response response) {
+    final header = response.headers['retry-after'];
+    final parsed = header == null ? null : int.tryParse(header.trim());
+    return parsed != null && parsed > 0 ? parsed : 5;
   }
 
   Future<Map<String, dynamic>> joinWaitlist() {

@@ -357,23 +357,36 @@ function makeRateLimitStore(prefix) {
   });
 }
 
-const claimLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 10,
-  keyGenerator: (req) => req.clientId || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  store: makeRateLimitStore('rl:claim:'),
-});
+// Build a per-class rate limiter. Each class gets its own store key prefix
+// so budgets DON'T share — gameplay can't be starved by, say, social calls.
+function buildLimiter(prefix, max, windowMs = 60_000) {
+  return rateLimit({
+    windowMs,
+    max,
+    keyGenerator: (req) => req.clientId || req.ip,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: makeRateLimitStore(prefix),
+    message: { error: 'Too many requests', retryAfterSeconds: Math.ceil(windowMs / 1000) },
+  });
+}
 
-const generalLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 120,
-  keyGenerator: (req) => req.clientId || req.ip,
-  standardHeaders: true,
-  legacyHeaders: false,
-  store: makeRateLimitStore('rl:general:'),
-});
+// Gameplay / content earning — cheap, capped by the daily point cap anyway,
+// so the limiter only needs to stop abuse, not normal play. Generous.
+const gameLimiter    = buildLimiter('rl:game:', 60);     // games, trivia, quests
+const contentLimiter = buildLimiter('rl:content:', 40);  // articles, surveys, stories, scratch, activity-events
+const tripLimiter    = buildLimiter('rl:trip:', 30);     // commute sessions
+const socialLimiter  = buildLimiter('rl:social:', 20);   // friends, referral
+
+// Sensitive actions — keep tight.
+const redeemLimiter  = buildLimiter('rl:redeem:', 12);   // reward redemption / watch
+const accountLimiter = buildLimiter('rl:account:', 5);   // account deletion
+
+// Backwards-compatible alias (kept so existing references still resolve);
+// prefer the specific limiters above for new routes.
+const claimLimiter = contentLimiter;
+
+const generalLimiter = buildLimiter('rl:general:', 200);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1240,7 +1253,7 @@ app.post('/api/devices/token', validate(z.object({
 // Account deletion (required by Apple + Play)
 // ---------------------------------------------------------------------------
 
-app.delete('/api/account', claimLimiter, async (req, res, next) => {
+app.delete('/api/account', accountLimiter, async (req, res, next) => {
   try {
     const ref = firestore.collection('metrosafar_users').doc(req.clientId);
 
@@ -1309,7 +1322,7 @@ app.get('/api/rewards', async (req, res, next) => {
   }
 });
 
-app.post('/api/rewards/watch/:videoId', claimLimiter, async (req, res, next) => {
+app.post('/api/rewards/watch/:videoId', redeemLimiter, async (req, res, next) => {
   try {
     const video = catalog.videos.find((item) => item.id === req.params.videoId);
     if (!video) { res.status(404).json({ error: 'Video not found' }); return; }
@@ -1333,7 +1346,7 @@ app.post('/api/rewards/watch/:videoId', claimLimiter, async (req, res, next) => 
   }
 });
 
-app.post('/api/rewards/redeem/:rewardId', claimLimiter, async (req, res, next) => {
+app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) => {
   try {
     // Re-read directly from Firestore so we get the freshest stock/active state
     const rewardDoc = await firestore.collection('catalog_rewards').doc(req.params.rewardId).get();
@@ -1354,6 +1367,11 @@ app.post('/api/rewards/redeem/:rewardId', claimLimiter, async (req, res, next) =
     if (globalStock !== null && globalStock <= 0) {
       res.status(400).json({ error: 'Reward is out of stock' }); return;
     }
+
+    // Pre-generate the redemption record ref so it's written atomically
+    // inside the same transaction that deducts points.
+    const redemptionId  = `rdm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const redemptionRef = firestore.collection('redemptions').doc(redemptionId);
 
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       // Per-user redemption count
@@ -1385,6 +1403,26 @@ app.post('/api/rewards/redeem/:rewardId', claimLimiter, async (req, res, next) =
       const redeemed = new Set(state.redeemedRewardIds || []);
       if (perUserLimit === 1) redeemed.add(reward.id);
 
+      // Persist a redemption record for the admin fulfillment queue (2a–2f).
+      // status: 'pending' → admin attaches a fulfillmentCode / marks 'fulfilled'.
+      txn.set(redemptionRef, {
+        id: redemptionId,
+        rewardId: reward.id,
+        rewardTitle: reward.title || '',
+        rewardCategory: reward.category || '',
+        discount: reward.discount || '',
+        userId: req.clientId,
+        userName: state.name || '',
+        userEmail: state.email || '',
+        pointsCost: cost,
+        status: 'pending',          // pending | fulfilled | cancelled
+        fulfillmentCode: null,      // voucher code / link — set by admin
+        fulfillmentNote: null,
+        createdAt: new Date().toISOString(),
+        fulfilledAt: null,
+        fulfilledBy: null,
+      });
+
       const next = {
         ...state,
         points: state.points - cost,
@@ -1395,6 +1433,8 @@ app.post('/api/rewards/redeem/:rewardId', claimLimiter, async (req, res, next) =
         next,
         response: {
           points: next.points,
+          redemptionId,
+          status: 'pending',
           reward: { ...reward, redeemed: true, redemptionCount: userCount + 1 },
         },
       };
@@ -1442,7 +1482,7 @@ app.get('/api/legal/privacy-policy', (_req, res) => res.json(staticData.legal.pr
 app.get('/api/legal/terms', (_req, res) => res.json(staticData.legal.terms));
 app.get('/api/support', (_req, res) => res.json(staticData.support));
 
-app.post('/api/games/:gameId/complete', claimLimiter, validate(gameCompleteSchema), async (req, res, next) => {
+app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema), async (req, res, next) => {
   try {
     const validGames = ['daily_spin', 'trivia', 'sudoku', 'word_puzzle', 'city_explorer'];
     if (!validGames.includes(req.params.gameId)) {
@@ -1471,9 +1511,20 @@ app.post('/api/games/:gameId/complete', claimLimiter, validate(gameCompleteSchem
       const newScore = Math.max(current.score, Number(req.body.score) || 0);
       const basePoints = Math.min(50, Math.max(15, Math.floor(Number(req.body.score) / 2)));
       const pointsEarned = Math.round(basePoints * commute.multiplier);
+
+      // Auto-complete the 'play_game' daily quest in the SAME transaction so
+      // the client doesn't need a separate /quests/.../complete round-trip.
+      const completed = new Set(state.completedQuests || []);
+      let questPointsEarned = 0;
+      if (!completed.has('play_game') && QUEST_POINTS['play_game']) {
+        completed.add('play_game');
+        questPointsEarned = QUEST_POINTS['play_game'];
+      }
+
       const next = {
         ...state,
-        points: state.points + pointsEarned,
+        points: state.points + pointsEarned + questPointsEarned,
+        completedQuests: [...completed],
         gameScores: { ...gameScores, [req.params.gameId]: { score: newScore, completions: current.completions + 1 } },
         ...(isDailySpin ? { lastDailySpinAt: now.toISOString() } : {}),
       };
@@ -1481,10 +1532,13 @@ app.post('/api/games/:gameId/complete', claimLimiter, validate(gameCompleteSchem
         next,
         response: {
           pointsEarned,
+          questCompleted: questPointsEarned > 0,
+          questPointsEarned,
           totalPoints: next.points,
           commuteMultiplier: commute.multiplier,
           commuteSessionId: commute.session?.id || null,
           gameScore: next.gameScores[req.params.gameId],
+          completedQuests: next.completedQuests,
         },
       };
     });
@@ -1520,7 +1574,7 @@ app.post('/api/games/:gameId/complete', claimLimiter, validate(gameCompleteSchem
 // Streak (transactional)
 // ---------------------------------------------------------------------------
 
-app.post('/api/streak/claim', claimLimiter, async (req, res, next) => {
+app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
   try {
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
@@ -1551,7 +1605,7 @@ const QUEST_POINTS = {
   'start_ride': 30, 'station_quiz': 25, 'check_passport': 10,
 };
 
-app.post('/api/quests/:questId/complete', claimLimiter, async (req, res, next) => {
+app.post('/api/quests/:questId/complete', gameLimiter, async (req, res, next) => {
   try {
     if (!QUEST_POINTS[req.params.questId]) { res.status(404).json({ error: 'Quest not found' }); return; }
 
@@ -1595,7 +1649,7 @@ app.get('/api/games/leaderboard', async (req, res, next) => {
 // Scratch cards (transactional — one scratch per card per user)
 // ---------------------------------------------------------------------------
 
-app.post('/api/scratch-cards/:cardId/scratch', claimLimiter, async (req, res, next) => {
+app.post('/api/scratch-cards/:cardId/scratch', contentLimiter, async (req, res, next) => {
   try {
     const cardId = req.params.cardId;
     const response = await claimTransaction(req.clientId, async (txn, state) => {
@@ -1638,7 +1692,7 @@ app.get('/api/articles', async (req, res, next) => {
   }
 });
 
-app.post('/api/articles/:articleId/read', claimLimiter, async (req, res, next) => {
+app.post('/api/articles/:articleId/read', contentLimiter, async (req, res, next) => {
   try {
     const article = catalog.articles.find((a) => a.id === req.params.articleId);
     if (!article) { res.status(404).json({ error: 'Article not found' }); return; }
@@ -1681,7 +1735,7 @@ app.get('/api/surveys', async (req, res, next) => {
   }
 });
 
-app.post('/api/surveys/:surveyId/submit', claimLimiter, validate(surveySubmitSchema), async (req, res, next) => {
+app.post('/api/surveys/:surveyId/submit', contentLimiter, validate(surveySubmitSchema), async (req, res, next) => {
   try {
     const survey = catalog.surveys.find((s) => s.id === req.params.surveyId);
     if (!survey) { res.status(404).json({ error: 'Survey not found' }); return; }
@@ -1728,7 +1782,7 @@ app.get('/api/stories', async (req, res, next) => {
   }
 });
 
-app.post('/api/stories/:storyId/complete', claimLimiter, validate(storyCompleteSchema), async (req, res, next) => {
+app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyCompleteSchema), async (req, res, next) => {
   try {
     const story = (staticData.stories || []).find((s) => s.id === req.params.storyId);
     if (!story) { res.status(404).json({ error: 'Story not found' }); return; }
@@ -1808,7 +1862,7 @@ app.get('/api/quests/today', async (req, res, next) => {
   }
 });
 
-app.post('/api/activity-events', claimLimiter, validate(activityEventSchema), async (req, res, next) => {
+app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), async (req, res, next) => {
   try {
     const { type, entityId, metadata } = req.body;
     if (!ACTIVITY_POINT_RULES[type]) { res.status(400).json({ error: `Unknown activity type: ${type}` }); return; }
@@ -1971,7 +2025,7 @@ app.get('/api/games/trivia/rank', async (req, res, next) => {
 });
 
 // ── POST /api/games/trivia/score — records score and triggers async leaderboard refresh
-app.post('/api/games/trivia/score', claimLimiter, validate(triviaScoreSchema), async (req, res, next) => {
+app.post('/api/games/trivia/score', gameLimiter, validate(triviaScoreSchema), async (req, res, next) => {
   try {
     const rank = await recordTriviaScore(req.clientId, req.body);
     const cityId = sanitizeCityId(req.body.cityId || '');
@@ -2037,7 +2091,7 @@ app.post('/api/referral/generate', async (req, res, next) => {
   }
 });
 
-app.post('/api/referral/apply', claimLimiter, validate(referralApplySchema), async (req, res, next) => {
+app.post('/api/referral/apply', socialLimiter, validate(referralApplySchema), async (req, res, next) => {
   try {
     const referral = await applyReferralToken(req.clientId, req.body.token);
     res.json({ applied: true, referral });
@@ -2096,7 +2150,7 @@ app.get('/api/social/friends', async (req, res, next) => {
   }
 });
 
-app.post('/api/social/friends/add', claimLimiter, validate(friendAddSchema), async (req, res, next) => {
+app.post('/api/social/friends/add', socialLimiter, validate(friendAddSchema), async (req, res, next) => {
   try {
     let friendUid = req.body.friendUid;
     if (req.body.token) {
@@ -2269,7 +2323,7 @@ app.get('/api/trip/commute-session/active', async (req, res, next) => {
   }
 });
 
-app.post('/api/trip/commute-session', claimLimiter, validate(commuteSessionSchema), async (req, res, next) => {
+app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema), async (req, res, next) => {
   try {
     const profile = await getUserState(req.clientId);
     const cityId = sanitizeCityId(req.body.cityId || profile.activeCityId);
@@ -2326,7 +2380,7 @@ app.post('/api/trip/commute-session', claimLimiter, validate(commuteSessionSchem
   }
 });
 
-app.post('/api/trip/commute-session/:sessionId/end', claimLimiter, validate(commuteEndSchema), async (req, res, next) => {
+app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commuteEndSchema), async (req, res, next) => {
   try {
     const ref = firestore.collection('metrosafar_commute_sessions').doc(req.params.sessionId);
     const snap = await ref.get();
@@ -2805,6 +2859,82 @@ app.post('/api/admin/catalog/reload', requireAdmin, async (req, res, next) => {
 app.get('/api/admin/catalog', requireAdmin, (_req, res) => {
   const counts = Object.fromEntries(CATALOG_TYPES.map(t => [t, catalog[t].length]));
   res.json({ types: CATALOG_TYPES, counts });
+});
+
+// ===========================================================================
+// ADMIN — REDEMPTION FULFILLMENT QUEUE (2a–2f)
+// Lets an operator see who redeemed what, attach a voucher code / note, and
+// mark each redemption fulfilled or cancelled. This is the surface the
+// backend fulfillment logic plugs into.
+// ===========================================================================
+
+const REDEMPTION_STATUSES = new Set(['pending', 'fulfilled', 'cancelled']);
+
+const redemptionUpdateSchema = z.object({
+  status: z.enum(['pending', 'fulfilled', 'cancelled']).optional(),
+  fulfillmentCode: z.string().trim().max(200).optional().nullable(),
+  fulfillmentNote: z.string().trim().max(500).optional().nullable(),
+});
+
+// GET /api/admin/redemptions?status=pending&rewardId=&limit=
+app.get('/api/admin/redemptions', requireAdmin, async (req, res, next) => {
+  try {
+    const { status, rewardId } = req.query;
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 200), 500));
+
+    let q = firestore.collection('redemptions');
+    if (status && REDEMPTION_STATUSES.has(status)) q = q.where('status', '==', status);
+    if (rewardId) q = q.where('rewardId', '==', rewardId);
+    q = q.orderBy('createdAt', 'desc').limit(limit);
+
+    const snap = await q.get();
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Lightweight status breakdown for the dashboard header
+    const counts = { pending: 0, fulfilled: 0, cancelled: 0 };
+    items.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
+
+    res.json({ items, count: items.length, counts });
+  } catch (err) { next(err); }
+});
+
+// GET /api/admin/redemptions/:id
+app.get('/api/admin/redemptions/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const snap = await firestore.collection('redemptions').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ error: 'Redemption not found' });
+    res.json({ id: snap.id, ...snap.data() });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/admin/redemptions/:id — attach a code / note and/or change status
+app.patch('/api/admin/redemptions/:id', requireAdmin, validate(redemptionUpdateSchema), async (req, res, next) => {
+  try {
+    const ref = firestore.collection('redemptions').doc(req.params.id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: 'Redemption not found' });
+    const before = snap.data();
+
+    const patch = { _updatedAt: new Date().toISOString() };
+    if (req.body.fulfillmentCode !== undefined) patch.fulfillmentCode = req.body.fulfillmentCode;
+    if (req.body.fulfillmentNote !== undefined) patch.fulfillmentNote = req.body.fulfillmentNote;
+    if (req.body.status !== undefined) {
+      patch.status = req.body.status;
+      if (req.body.status === 'fulfilled') {
+        patch.fulfilledAt = new Date().toISOString();
+        patch.fulfilledBy = req.admin.email;
+      }
+    }
+
+    await ref.update(patch);
+    await appendAudit({
+      actor: req.admin.uid, actorEmail: req.admin.email, role: req.admin.role,
+      action: `redemption.${patch.status || 'update'}`, before, after: { id: req.params.id, ...patch },
+      ip: req.ip, ua: req.get('user-agent'),
+    });
+
+    res.json({ id: req.params.id, ...before, ...patch });
+  } catch (err) { next(err); }
 });
 
 // ===========================================================================
