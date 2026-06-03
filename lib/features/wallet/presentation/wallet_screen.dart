@@ -9,6 +9,7 @@ import '../../../domain/entities/activity_event.dart';
 import '../application/wallet_provider.dart';
 import '../application/rewards_provider.dart';
 import 'my_redemptions_screen.dart';
+import '../../play/presentation/watch_and_earn_card.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -111,6 +112,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                                 ),
                               ],
                             ),
+
+                            const SizedBox(height: AppSpacing.s6),
+
+                            // Earn more — rewarded video
+                            const WatchAndEarnCard(),
 
                             const SizedBox(height: AppSpacing.s8),
 

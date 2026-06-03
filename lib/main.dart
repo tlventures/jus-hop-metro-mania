@@ -199,6 +199,14 @@ class _MetroSafarAppState extends ConsumerState<MetroSafarApp> {
     final cityLight = ref.watch(cityLightThemeProvider);
     final cityDark = ref.watch(cityDarkThemeProvider);
 
+    // Keep the FCM city-topic subscription in sync with the active city so
+    // admin "by city" broadcasts are delivered.
+    ref.listen(activeCityProvider, (prev, next) {
+      if (next != null && next.id != prev?.id) {
+        NotificationService.instance.subscribeToCity(next.id);
+      }
+    });
+
     return MaterialApp.router(
       title: 'MetroSafar',
       theme: cityLight,

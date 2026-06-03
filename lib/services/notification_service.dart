@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend_service.dart';
 import '../app/router.dart' as router_module;
@@ -13,6 +14,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+
+  static const String _cityTopicKey = 'fcm_city_topic';
 
   static const AndroidNotificationChannel _androidChannel =
       AndroidNotificationChannel(
@@ -70,6 +73,12 @@ class NotificationService {
     // delivered. (Topic messages only reach subscribed devices.)
     try {
       await _messaging.subscribeToTopic('all_users');
+      // Re-subscribe to the last known city topic on launch.
+      final prefs = await SharedPreferences.getInstance();
+      final lastCity = prefs.getString(_cityTopicKey);
+      if (lastCity != null && lastCity.isNotEmpty) {
+        await _messaging.subscribeToTopic('city_$lastCity');
+      }
     } catch (error) {
       debugPrint('[NotificationService] topic subscribe failed: $error');
     }
@@ -105,6 +114,26 @@ class NotificationService {
       router_module.appRouter.go(route);
     } catch (e) {
       debugPrint('[NotificationService] navigation failed: $e');
+    }
+  }
+
+  /// Subscribe to the active city's FCM topic so admin "by city" broadcasts
+  /// land. Unsubscribes from the previously-subscribed city first. Safe to
+  /// call repeatedly; no-ops when the city is unchanged.
+  Future<void> subscribeToCity(String? cityId) async {
+    if (cityId == null || cityId.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final previous = prefs.getString(_cityTopicKey);
+      if (previous == cityId) return; // already subscribed
+      if (previous != null && previous.isNotEmpty) {
+        await _messaging.unsubscribeFromTopic('city_$previous');
+      }
+      await _messaging.subscribeToTopic('city_$cityId');
+      await prefs.setString(_cityTopicKey, cityId);
+      debugPrint('[NotificationService] subscribed to city_$cityId');
+    } catch (e) {
+      debugPrint('[NotificationService] city topic subscribe failed: $e');
     }
   }
 
