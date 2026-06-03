@@ -97,17 +97,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: AppSpacing.s4),
 
+                  // Active-commute UI (only renders during a ride). The
+                  // "start" action now lives in the docked Start Ride bar,
+                  // so the duplicate Commute Auto-Mode card was removed.
                   const CommuteOverlay(),
-                  if (!commute.isVisible) ...[
-                    _Phase56ActionCard(
-                      icon: Icons.train_outlined,
-                      title: 'Commute Auto-Mode',
-                      subtitle: 'Start a 1.5x earning session for this ride.',
-                      cta: 'Start',
-                      onTap: _startVerifiedCommute,
-                    ),
-                    const SizedBox(height: AppSpacing.s4),
-                  ],
+                  if (commute.isVisible) const SizedBox(height: AppSpacing.s4),
 
                   _StreakStrip(
                     streak: streak,

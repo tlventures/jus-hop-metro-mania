@@ -419,15 +419,22 @@ function getNextTier(points) {
   return { name: null, pointsNeeded: 0 };
 }
 
+// Average CO₂ saved per metro ride vs. a car trip (kg).
+const CO2_PER_RIDE_KG = 0.4;
+
 function buildDerivedProfile(state) {
   const points = Number(state.points || 0);
-  const co2SavedKg = Number((points * 0.05).toFixed(1));
+  // CO₂ reflects ACTUAL rides taken, not points — a user who only earned
+  // streak/game points has saved no CO₂ yet.
+  const ridesCompleted = Number(state.ridesCompleted || 0);
+  const co2SavedKg = Number((ridesCompleted * CO2_PER_RIDE_KG).toFixed(1));
   const treesEquivalent = Math.max(0, Math.round(co2SavedKg / 25));
   const nextTier = getNextTier(points);
 
   return {
     ...state,
     points,
+    ridesCompleted,
     membershipTier: getTier(points),
     nextTierName: nextTier.name,
     pointsToNextTier: nextTier.pointsNeeded,
@@ -1948,6 +1955,10 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
         dailyPointsEarned: currentDailyEarned + pointsAwarded,
         lastDailyEarnDate: new Date().toISOString(),
         walletTransactions: transactions,
+        // Lifetime ride counter drives the CO₂ estimate.
+        ...(type === 'ride_completed'
+            ? { ridesCompleted: (state.ridesCompleted || 0) + 1 }
+            : {}),
       };
       return {
         next,
