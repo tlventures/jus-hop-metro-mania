@@ -59,7 +59,7 @@ class _PlayHubScreenState extends ConsumerState<PlayHubScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
-                    height: 148,
+                    height: 168,
                     child: _ScoreHero(totalScore: totalScore),
                   ),
 
@@ -250,10 +250,10 @@ class _ScoreHero extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s2),
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
+                    constraints: const BoxConstraints(maxWidth: 300),
                     child: Text(
                       'Skill score. Rewards stay in your wallet.',
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodySmall.copyWith(
                         color: Colors.white.withValues(alpha: 0.72),

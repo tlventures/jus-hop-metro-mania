@@ -199,7 +199,8 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
     await SharePlus.instance.share(
       ShareParams(
         text:
-            'I just won $label on MetroSafar Daily Spin! 🚇 Try your luck today.',
+            'I just won $label on MetroSafar Daily Spin! 🚇 Try your luck today.\n\n'
+            'Get the app: https://metrosafar.app',
         subject: 'MetroSafar Daily Spin',
       ),
     );
