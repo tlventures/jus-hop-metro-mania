@@ -7,8 +7,14 @@ import '../design_system/components/offline_banner.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/wallet/presentation/wallet_screen.dart';
 import '../features/wallet/presentation/my_redemptions_screen.dart';
+import '../features/notifications/presentation/notifications_inbox_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/play/presentation/play_hub_screen.dart';
+import '../features/play/games/daily_spin_screen.dart';
+import '../features/play/games/trivia_screen.dart';
+import '../features/play/games/sudoku_screen.dart';
+import '../features/play/games/word_puzzle_screen.dart';
+import '../features/play/games/city_explorer_screen.dart';
 import '../features/learn/presentation/learn_hub_screen.dart';
 import '../features/booking/presentation/booking_coming_soon_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
@@ -52,7 +58,29 @@ Future<String?> _redirect(BuildContext context, GoRouterState state) async {
   return null;
 }
 
+/// Global navigator key — lets non-widget code (e.g. notification taps)
+/// drive navigation via [appRouter].
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Maps a game id to its screen — shared by the Play hub and deep links.
+Widget gameScreenFor(String gameId) {
+  switch (gameId) {
+    case 'trivia':
+      return const TriviaScreen();
+    case 'sudoku':
+      return const SudokuScreen();
+    case 'word_puzzle':
+      return const WordPuzzleScreen();
+    case 'city_explorer':
+      return const CityExplorerScreen();
+    case 'daily_spin':
+    default:
+      return const DailySpinScreen();
+  }
+}
+
 final GoRouter appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/home',
   redirect: _redirect,
   routes: [
@@ -98,6 +126,15 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/my-redemptions',
       builder: (context, state) => const MyRedemptionsScreen(),
+    ),
+    GoRoute(
+      path: '/notifications-inbox',
+      builder: (context, state) => const NotificationsInboxScreen(),
+    ),
+    // Deep link straight into a specific game (e.g. /game/trivia).
+    GoRoute(
+      path: '/game/:gameId',
+      builder: (context, state) => gameScreenFor(state.pathParameters['gameId'] ?? 'daily_spin'),
     ),
     GoRoute(
       path: '/booking',

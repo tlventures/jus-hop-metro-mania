@@ -77,20 +77,34 @@ class StreakNotifier extends StateNotifier<Streak> {
     );
   }
 
-  Future<void> claimStreak() async {
+  /// Claim today's streak. Uses the server's authoritative response (handles
+  /// increment vs. reset-on-missed-day). Returns true if a claim landed.
+  Future<bool> claimStreak() async {
     try {
-      await _backendService.claimStreakBonus();
+      final res = await _backendService.claimStreakBonus();
+      if (_disposed) return false;
+      final day = (res['streakDay'] as num?)?.toInt();
+      if (day != null) {
+        state = Streak(
+          currentDay: day,
+          longestStreak: (res['longestStreak'] as num?)?.toInt() ?? state.longestStreak,
+          lastClaimedAt: DateTime.now(),
+          totalPoints: (res['totalPoints'] as num?)?.toInt() ?? state.totalPoints,
+        );
+        return true;
+      }
     } catch (e) {
-      debugPrint('StreakNotifier.claimStreak error: $e');
+      // 400 = already claimed within 24h; not an error worth surfacing.
+      debugPrint('StreakNotifier.claimStreak: $e');
     }
+    return false;
+  }
 
-    state = Streak(
-      currentDay: state.currentDay + 1,
-      longestStreak:
-          state.currentDay + 1 > state.longestStreak ? state.currentDay + 1 : state.longestStreak,
-      lastClaimedAt: DateTime.now(),
-      totalPoints: state.totalPoints + state.pointsForClaim,
-    );
+  /// Auto-advance the streak on app open if a day is due (>24h since last
+  /// claim). Makes the streak track automatically without a manual tap.
+  Future<bool> autoClaimIfDue() async {
+    if (_disposed || !state.canClaim) return false;
+    return claimStreak();
   }
 
   void resetStreak() {

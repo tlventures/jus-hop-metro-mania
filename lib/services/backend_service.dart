@@ -79,6 +79,16 @@ class BackendService {
     return _getMap('/api/me/redemptions', cacheKey: 'cache_my_redemptions');
   }
 
+  /// Fetch the in-app notification inbox feed.
+  Future<Map<String, dynamic>> getNotificationFeed() {
+    return _getMap('/api/notifications/feed', cacheKey: 'cache_notif_feed');
+  }
+
+  /// Award points after a rewarded ad completes (server enforces the daily cap).
+  Future<Map<String, dynamic>> claimAdReward() {
+    return _sendJson('POST', '/api/rewards/watch-ad', cacheKey: 'cache_ad_reward');
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getProfile() {

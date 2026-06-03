@@ -172,6 +172,15 @@ Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for s
 
 ## 8. Pending / next steps
 
+### ✅ Completed 3 June 2026 (UX batch — v1.0.9+10)
+- [x] **Profile version** now read at runtime via `package_info_plus` (no longer hardcoded "v1.0.0").
+- [x] **Streaks auto-track:** streak now auto-advances on daily app open (`autoClaimIfDue`); backend resets the streak to day 1 if a day is missed (>48h). No manual tap needed.
+- [x] **Share includes app link** (`https://metrosafar.app`) + fixed Play-hub subtitle truncation.
+- [x] **Game deep-links:** added `/game/:gameId` route + global navigator key; notification taps route via `routeFromData` (`screen=game/gameId`, `screen=my_redemptions`). Handles foreground tap, background open, and cold start.
+- [x] **In-app notification inbox:** backend records every admin send to `app_notifications`; new `GET /api/notifications/feed`; new inbox screen at `/notifications-inbox` reached via a 🔔 bell on the Home header.
+- [x] **Watch & Earn (rewarded ads):** rewarded-ad unit added (test ID); `WatchAndEarnCard` on the Play hub; `POST /api/rewards/watch-ad` awards +15 pts, server-capped at 5/day.
+- Backend redeployed → `metrosafar-backend-00012-626`.
+
 ### ✅ Completed 3 June 2026
 - [x] **Fixed admin page crashes** (Telemetry/Flags/Audit/Cities showed "This page couldn't load"). Cause: backend wraps list responses in envelopes (`{cities|flags|users|events|entries}`) but the admin API client returned them as bare arrays → pages did `.map()` on an object → render crash. Fix: unwrap envelopes in `admin/lib/api.ts`. Redeployed → `metrosafar-admin-00003-t7t`.
 - [x] **Fixed "Failed to send notification"** — backend SA lacked FCM permission on metrosafar-5bcff. Granted `roles/firebase.admin` (includes `cloudmessaging.messages.create`) + ensured FCM API enabled. (Note: "All Users" sends to FCM topic `all_users`; delivery requires the app to subscribe to that topic.)

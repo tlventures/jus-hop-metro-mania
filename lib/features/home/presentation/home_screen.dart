@@ -291,6 +291,14 @@ class _CompactHeader extends ConsumerWidget {
           ),
           IconButton(
             icon: Icon(
+              Icons.notifications_none,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            onPressed: () => context.push('/notifications-inbox'),
+            tooltip: 'Notifications',
+          ),
+          IconButton(
+            icon: Icon(
               Icons.settings_outlined,
               color: colorScheme.onSurfaceVariant,
             ),

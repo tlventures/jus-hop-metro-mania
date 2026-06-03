@@ -10,6 +10,7 @@ import '../games/trivia_screen.dart';
 import '../games/sudoku_screen.dart';
 import '../games/word_puzzle_screen.dart';
 import '../games/city_explorer_screen.dart';
+import 'watch_and_earn_card.dart';
 import '../../social/presentation/friends_screen.dart';
 
 class PlayHubScreen extends ConsumerStatefulWidget {
@@ -73,6 +74,10 @@ class _PlayHubScreenState extends ConsumerState<PlayHubScreen> {
                           ),
                         ),
                   ),
+                  const SizedBox(height: AppSpacing.s4),
+
+                  // Watch a rewarded video, earn points
+                  const WatchAndEarnCard(),
                   const SizedBox(height: AppSpacing.s4),
 
                   // Games title

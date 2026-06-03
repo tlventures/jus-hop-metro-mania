@@ -1628,14 +1628,17 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
       const lastClaim = state.lastStreakClaimAt ? new Date(state.lastStreakClaimAt) : null;
-      if (lastClaim && (now - lastClaim) < 24 * 60 * 60 * 1000) {
+      const msSince = lastClaim ? (now - lastClaim) : Infinity;
+      if (msSince < 24 * 60 * 60 * 1000) {
         const err = new Error('Streak can only be claimed once per 24 hours'); err.statusCode = 400; throw err;
       }
-      const newDay = (state.streakDay || 0) + 1;
+      // Reset the streak if a full day was missed (>48h since last claim).
+      const continuing = msSince <= 48 * 60 * 60 * 1000;
+      const newDay = continuing ? (state.streakDay || 0) + 1 : 1;
       const newLongest = Math.max(state.longestStreak || 0, newDay);
       const pointsEarned = 5 * newDay;
       const next = { ...state, points: state.points + pointsEarned, streakDay: newDay, longestStreak: newLongest, lastStreakClaimAt: now.toISOString() };
-      return { next, response: { streakDay: newDay, longestStreak: newLongest, pointsEarned, totalPoints: next.points } };
+      return { next, response: { streakDay: newDay, longestStreak: newLongest, pointsEarned, totalPoints: next.points, reset: !continuing } };
     });
 
     res.json(response);
@@ -2054,6 +2057,68 @@ app.get('/api/me/redemptions', async (req, res, next) => {
       };
     });
     res.json({ redemptions: items, count: items.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/notifications/feed — in-app notification inbox (recent broadcasts)
+app.get('/api/notifications/feed', async (req, res, next) => {
+  try {
+    const snap = await firestore.collection('app_notifications')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ notifications: items, count: items.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/rewards/watch-ad — award points after a rewarded ad completes.
+// Daily-capped to prevent abuse; the client only calls this on the SDK's
+// verified userEarnedReward callback.
+const AD_REWARD_POINTS = 15;
+const AD_REWARD_DAILY_LIMIT = 5;
+
+app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
+  try {
+    const response = await claimTransaction(req.clientId, async (txn, state) => {
+      const today = new Date().toDateString();
+      const isNewDay = state.adWatchDate !== today;
+      const watchesToday = isNewDay ? 0 : (state.adWatchesToday || 0);
+
+      if (watchesToday >= AD_REWARD_DAILY_LIMIT) {
+        return {
+          next: null,
+          response: {
+            pointsAwarded: 0,
+            reason: 'ad_daily_limit_reached',
+            watchesToday,
+            dailyLimit: AD_REWARD_DAILY_LIMIT,
+            totalPoints: state.points,
+          },
+        };
+      }
+
+      const next = {
+        ...state,
+        points: state.points + AD_REWARD_POINTS,
+        adWatchDate: today,
+        adWatchesToday: watchesToday + 1,
+      };
+      return {
+        next,
+        response: {
+          pointsAwarded: AD_REWARD_POINTS,
+          watchesToday: watchesToday + 1,
+          dailyLimit: AD_REWARD_DAILY_LIMIT,
+          totalPoints: next.points,
+        },
+      };
+    });
+    res.json(response);
   } catch (error) {
     next(error);
   }
@@ -3538,9 +3603,27 @@ app.delete('/api/admin/flags/:key', requireAdmin, async (req, res, next) => {
 // ADMIN — NOTIFICATIONS (FCM)
 // ---------------------------------------------------------------------------
 
+// Persist a notification to the in-app feed (best-effort, fire-and-forget).
+async function recordNotificationFeed({ title, body, audience, data }) {
+  try {
+    await firestore.collection('app_notifications').add({
+      title, body, audience: audience || 'all',
+      data: data || {}, createdAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    logger.warn({ err: e }, 'Notification feed write failed');
+  }
+}
+
 app.post('/api/admin/notifications/send', requireAdmin, async (req, res, next) => {
   try {
     const { title, body, topic, cityIds, userIds, data: extraData } = req.body;
+    // Record to the in-app inbox feed regardless of delivery channel.
+    recordNotificationFeed({
+      title, body,
+      audience: topic ? `topic:${topic}` : cityIds?.length ? `cities:${cityIds.join(',')}` : userIds?.length ? 'targeted' : 'all',
+      data: extraData,
+    });
     if (!title || !body) return res.status(400).json({ error: 'title and body required' });
 
     let message;

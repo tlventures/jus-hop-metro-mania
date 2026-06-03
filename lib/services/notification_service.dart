@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'backend_service.dart';
+import '../app/router.dart' as router_module;
 
 class NotificationService {
   static final NotificationService instance = NotificationService._();
@@ -30,6 +31,10 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
+      onDidReceiveNotificationResponse: (resp) {
+        final payload = resp.payload;
+        if (payload != null && payload.isNotEmpty) _navigate(payload);
+      },
     );
 
     await _localNotifications
@@ -74,9 +79,33 @@ class NotificationService {
       await showLocal(
         title: notification?.title ?? 'MetroSafar',
         body: notification?.body ?? 'You have a new update.',
-        payload: message.data['deeplink'] as String?,
+        payload: routeFromData(message.data),
       );
     });
+
+    // App opened by tapping a notification (background → foreground).
+    FirebaseMessaging.onMessageOpenedApp.listen((m) => _navigate(routeFromData(m.data)));
+    // App launched from terminated state by a notification.
+    final initial = await _messaging.getInitialMessage();
+    if (initial != null) _navigate(routeFromData(initial.data));
+  }
+
+  /// Resolve an in-app route from an FCM data payload.
+  /// Conventions: { screen: 'my_redemptions' } or { screen: 'game', gameId: 'trivia' }.
+  String routeFromData(Map<String, dynamic> data) {
+    final screen = data['screen']?.toString();
+    if (screen == 'my_redemptions') return '/my-redemptions';
+    if (screen == 'game' && data['gameId'] != null) return '/game/${data['gameId']}';
+    if (data['deeplink'] != null) return data['deeplink'].toString();
+    return '/home';
+  }
+
+  void _navigate(String route) {
+    try {
+      router_module.appRouter.go(route);
+    } catch (e) {
+      debugPrint('[NotificationService] navigation failed: $e');
+    }
   }
 
   Future<void> uploadToken(

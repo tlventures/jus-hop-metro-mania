@@ -82,6 +82,14 @@ class HomeNotifier extends StateNotifier<AsyncValue<HomeData>> {
       // Hydrate wallet summary (points + tier only; transactions still
       // loaded separately by the wallet tab when it opens)
       _ref.read(walletProvider.notifier).hydrateFromHomeData(home.wallet);
+
+      // Auto-advance the daily streak so it tracks on app open (no manual tap).
+      // If it lands, reflect the new points in the wallet immediately.
+      final claimed = await _ref.read(streakProvider.notifier).autoClaimIfDue();
+      if (claimed && !_disposed) {
+        final pts = _ref.read(streakProvider).totalPoints;
+        _ref.read(walletProvider.notifier).applyEarnResult({'totalPoints': pts});
+      }
     } catch (e, st) {
       debugPrint('HomeNotifier.fetch error: $e');
       if (!_disposed) state = AsyncValue.error(e, st);

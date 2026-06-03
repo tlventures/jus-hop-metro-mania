@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
@@ -504,13 +505,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   const SizedBox(height: AppSpacing.s8),
 
-                  // App version
+                  // App version — read at runtime so it never goes stale
                   Center(
-                    child: Text(
-                      'MetroSafar v1.0.0',
-                      style: AppTypography.bodySmall.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                    child: FutureBuilder<PackageInfo>(
+                      future: PackageInfo.fromPlatform(),
+                      builder: (context, snap) {
+                        final v = snap.data?.version ?? '';
+                        final b = snap.data?.buildNumber ?? '';
+                        final label = v.isEmpty
+                            ? 'MetroSafar'
+                            : 'MetroSafar v$v${b.isNotEmpty ? ' ($b)' : ''}';
+                        return Text(
+                          label,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s6 + 80),
