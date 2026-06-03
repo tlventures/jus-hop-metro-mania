@@ -61,6 +61,14 @@ class NotificationService {
       debugPrint('[NotificationService] token registration failed: $error');
     }
 
+    // Subscribe to the broadcast topic so admin "All Users" pushes are
+    // delivered. (Topic messages only reach subscribed devices.)
+    try {
+      await _messaging.subscribeToTopic('all_users');
+    } catch (error) {
+      debugPrint('[NotificationService] topic subscribe failed: $error');
+    }
+
     FirebaseMessaging.onMessage.listen((message) async {
       final notification = message.notification;
       await showLocal(
