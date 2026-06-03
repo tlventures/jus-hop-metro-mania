@@ -9,7 +9,6 @@ import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
-import '../../../services/localization_service.dart';
 import '../../../services/user_display_name.dart';
 import '../application/streak_provider.dart';
 import '../application/quest_provider.dart';
@@ -67,6 +66,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
+        leadingWidth: 56,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.s4),
+          child: GestureDetector(
+            onTap: () => context.go('/profile'),
+            child: CircleAvatar(
+              radius: 16,
+              backgroundColor: colorScheme.primaryContainer,
+              child: Text(
+                UserDisplayName.initial(userName.split(' ').first),
+                style: AppTypography.labelLarge.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ),
         title: Text(
           'MetroSafar',
           style: AppTypography.headlineMedium.copyWith(color: colorScheme.onSurface),
@@ -89,11 +106,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         bottom: false,
         child: Column(
           children: [
-            _CompactHeader(
-              name: userName,
-              tier: wallet.tier,
-              points: wallet.points,
-            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -250,102 +262,6 @@ double _asDouble(Object? value) {
   return 0.0;
 }
 
-// =============================================================================
-// Compact header — single row: avatar · name · tier chip · settings
-// =============================================================================
-
-class _CompactHeader extends ConsumerWidget {
-  final String name;
-  final String tier;
-  final int points;
-
-  const _CompactHeader({
-    required this.name,
-    required this.tier,
-    required this.points,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final firstName = name.split(' ').first;
-    final initial = UserDisplayName.initial(firstName);
-    final tierEmoji = switch (tier.toLowerCase()) {
-      'platinum' => '💎',
-      'gold' => '🥇',
-      'silver' => '🥈',
-      _ => '🥉',
-    };
-
-    // Keep greeting city-aware, but do not show a city label in the header.
-    final city = ref.watch(activeCityProvider);
-    final locale = ref.watch(localeProvider).languageCode;
-    final greeting =
-        city != null ? city.greetings.greetingFor(locale) : _defaultGreeting();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.s4,
-        AppSpacing.s3,
-        AppSpacing.s4,
-        AppSpacing.s3,
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: colorScheme.primaryContainer,
-            child: Text(
-              initial,
-              style: AppTypography.titleMedium.copyWith(
-                color: colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.s3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$greeting, $firstName',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.titleSmall.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Text(tierEmoji, style: const TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      tier,
-                      style: AppTypography.labelMedium.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _defaultGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-}
 
 // =============================================================================
 // Launch hero — daily rewards command center
