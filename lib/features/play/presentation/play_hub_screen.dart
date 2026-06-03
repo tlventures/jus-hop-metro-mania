@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
@@ -107,26 +108,17 @@ class _PlayHubScreenState extends ConsumerState<PlayHubScreen> {
 
                   const SizedBox(height: AppSpacing.s4),
 
-                  // Other games in 2-col grid
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: AppSpacing.s4,
-                          mainAxisSpacing: AppSpacing.s4,
-                          childAspectRatio: 0.82,
+                  // Other games — vertical list (predictable left-to-right
+                  // reading; descriptions never truncate).
+                  ...games.skip(1).map(
+                        (game) => Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                          child: _GameCard(
+                            game: game,
+                            onTap: () => _launchGame(context, game),
+                          ),
                         ),
-                    itemCount: games.length - 1,
-                    itemBuilder: (context, index) {
-                      final game = games[index + 1];
-                      return _GameCard(
-                        game: game,
-                        onTap: () => _launchGame(context, game),
-                      );
-                    },
-                  ),
+                      ),
 
                   const SizedBox(height: AppSpacing.s8),
                 ],
@@ -200,12 +192,14 @@ class _ScoreHero extends StatelessWidget {
               ),
             ),
             Positioned(
-              right: -22,
-              top: -28,
+              right: -16,
+              top: -22,
               child: Icon(
-                Icons.emoji_events_outlined,
-                size: 118,
-                color: Colors.white.withValues(alpha: 0.14),
+                // Filled (not thin-outline) so it reads as an intentional
+                // brand watermark rather than a broken-image placeholder.
+                Icons.emoji_events,
+                size: 120,
+                color: AppColors.neonLime.withValues(alpha: 0.20),
               ),
             ),
             Positioned(
@@ -257,7 +251,7 @@ class _ScoreHero extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 300),
                     child: Text(
-                      'Skill score. Rewards stay in your wallet.',
+                      'Rewards go straight to your wallet.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodySmall.copyWith(
@@ -452,45 +446,61 @@ class _GameCard extends StatelessWidget {
       );
     }
 
-    // Regular card
+    // Regular card — full-width list row: icon · title+description · badges.
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.s4),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainer,
           borderRadius: AppRadius.borderRadiusXL,
-          border: Border.all(color: colorScheme.outline.withValues(alpha: 0.3)),
+          border: Border.all(color: colorScheme.outline.withValues(alpha: 0.25)),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
           children: [
-            Text(game.icon, style: const TextStyle(fontSize: 42)),
-            const SizedBox(height: AppSpacing.s3),
-            Text(
-              game.name,
-              style: AppTypography.labelLarge.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHigh,
+                borderRadius: AppRadius.borderRadiusL,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              child: Text(game.icon, style: const TextStyle(fontSize: 28)),
             ),
-            const SizedBox(height: AppSpacing.s1),
-            Text(
-              game.description,
-              style: AppTypography.bodySmall.copyWith(
-                color: colorScheme.onSurfaceVariant,
+            const SizedBox(width: AppSpacing.s4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    game.name,
+                    style: AppTypography.titleSmall.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    game.description,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: AppSpacing.s3),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: AppSpacing.s1,
+            const SizedBox(width: AppSpacing.s3),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -505,28 +515,20 @@ class _GameCard extends StatelessWidget {
                     '+${game.pointsPerRound}',
                     style: AppTypography.labelSmall.copyWith(
                       color: AppColors.goldPoints,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                if (game.commuteLengthLabel.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s2,
-                      vertical: AppSpacing.s1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer,
-                      borderRadius: AppRadius.borderRadiusS,
-                    ),
-                    child: Text(
-                      game.commuteLengthLabel,
-                      style: AppTypography.labelSmall.copyWith(
-                        color: colorScheme.onSecondaryContainer,
-                        fontSize: 9,
-                      ),
+                if (game.commuteLengthLabel.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    game.commuteLengthLabel,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 10,
                     ),
                   ),
+                ],
               ],
             ),
           ],

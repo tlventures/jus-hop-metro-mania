@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/city/current_city_provider.dart';
@@ -92,7 +93,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     wallet: wallet,
                     streak: streak,
                     isFreshUser: isFreshUser,
-                    onStart: _startVerifiedCommute,
                     onWallet: () => context.go('/wallet'),
                   ),
                   const SizedBox(height: AppSpacing.s4),
@@ -111,11 +111,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   _StreakStrip(
                     streak: streak,
-                    onClaim:
-                        streak.canClaim
-                            ? () =>
-                                ref.read(streakProvider.notifier).claimStreak()
-                            : null,
+                    onClaim: streak.canClaim
+                        ? () {
+                            HapticFeedback.mediumImpact();
+                            ref.read(streakProvider.notifier).claimStreak();
+                          }
+                        : null,
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
@@ -155,7 +156,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   icon: g.icon,
                                   label: g.name,
                                   points: '+${g.pointsPerRound}',
-                                  onTap: () => context.go('/play'),
+                                  onTap: () => context.push('/game/${g.id}'),
                                 ),
                               ),
                             ),
@@ -184,6 +185,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
+      // Persistent, thumb-reachable primary action. Hidden while a commute
+      // is already running (the overlay takes over then).
+      bottomNavigationBar: commute.isVisible
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.s4, AppSpacing.s2, AppSpacing.s4, AppSpacing.s3,
+                ),
+                child: SizedBox(
+                  height: AppSpacing.buttonHeight,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      _startVerifiedCommute();
+                    },
+                    icon: const Icon(Icons.train_rounded),
+                    label: const Text('Start Ride'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.neonLime,
+                      foregroundColor: AppColors.cityInk,
+                      textStyle: AppTypography.labelLarge.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 
@@ -327,7 +358,6 @@ class _LaunchHero extends ConsumerWidget {
   final WalletState wallet;
   final Streak streak;
   final bool isFreshUser;
-  final Future<void> Function() onStart;
   final VoidCallback onWallet;
 
   const _LaunchHero({
@@ -335,7 +365,6 @@ class _LaunchHero extends ConsumerWidget {
     required this.wallet,
     required this.streak,
     required this.isFreshUser,
-    required this.onStart,
     required this.onWallet,
   });
 
@@ -451,32 +480,6 @@ class _LaunchHero extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.s5),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: onStart,
-                          icon: const Icon(Icons.train_outlined),
-                          label: const Text('Start Ride'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.neonLime,
-                            foregroundColor: AppColors.cityInk,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.s3),
-                      IconButton.filledTonal(
-                        onPressed: onWallet,
-                        icon: const Icon(Icons.arrow_forward),
-                        tooltip: 'Open wallet',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -544,8 +547,11 @@ class _HeroStat extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        // Dark scrim (not low-opacity white) so values stay legible in
+        // bright outdoor light against the teal/magenta gradient (WCAG AA).
+        color: AppColors.cityInk.withValues(alpha: 0.55),
         borderRadius: AppRadius.borderRadiusL,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
@@ -558,7 +564,8 @@ class _HeroStat extends StatelessWidget {
                 Text(
                   label,
                   style: AppTypography.labelSmall.copyWith(
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
@@ -567,7 +574,7 @@ class _HeroStat extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.titleSmall.copyWith(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
@@ -607,12 +614,14 @@ class _StreakStrip extends StatelessWidget {
 
     String subtitle;
     if (isFresh) {
-      subtitle = 'Start your streak today — ride the metro to earn +5 pts';
+      subtitle = 'Open the app daily to build your streak — +5 pts a day';
     } else if (isClaimable) {
-      subtitle = 'Tap to claim today — +${(streak.currentDay + 1) * 5} pts';
+      subtitle = 'Tap to lock in today — +${(streak.currentDay + 1) * 5} pts';
     } else {
-      subtitle = 'See you tomorrow to continue your streak';
+      subtitle = 'Today secured ✓ — back tomorrow for +${(streak.currentDay + 1) * 5} pts';
     }
+    final nextIdx = (todayIdx + 1) % 7;
+    final nextPts = (streak.currentDay + (isClaimable ? 2 : 1)) * 5;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s4),
@@ -628,7 +637,8 @@ class _StreakStrip extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('🔥', style: const TextStyle(fontSize: 20)),
+              const Icon(Icons.local_fire_department,
+                  size: 20, color: _StreakDay._flame),
               const SizedBox(width: AppSpacing.s2),
               Text(
                 isFresh ? 'No streak yet' : '${streak.currentDay}-day streak',
@@ -660,21 +670,37 @@ class _StreakStrip extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.s4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(7, (i) {
-              final isToday = i == todayIdx;
-              final isFilled = filledIndices.contains(i);
-              return _StreakDay(
-                label: labels[i],
-                state:
-                    isToday
+          // Connected 7-day timeline: a faint line links the circles to convey
+          // progression; completed days fill solid with a check.
+          Stack(
+            children: [
+              Positioned(
+                left: 16,
+                right: 16,
+                top: 15,
+                child: Container(
+                  height: 2,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(7, (i) {
+                  final isToday = i == todayIdx;
+                  final isFilled = filledIndices.contains(i);
+                  return _StreakDay(
+                    label: labels[i],
+                    // Pull the user forward: show tomorrow's reward.
+                    subLabel: i == nextIdx ? '+$nextPts' : null,
+                    state: isToday
                         ? (isClaimable
                             ? _DayState.todayClaimable
                             : _DayState.todayDone)
                         : (isFilled ? _DayState.filled : _DayState.empty),
-              );
-            }),
+                  );
+                }),
+              ),
+            ],
           ),
         ],
       ),
@@ -687,8 +713,12 @@ enum _DayState { empty, filled, todayClaimable, todayDone }
 class _StreakDay extends StatelessWidget {
   final String label;
   final _DayState state;
+  final String? subLabel;
 
-  const _StreakDay({required this.label, required this.state});
+  const _StreakDay({required this.label, required this.state, this.subLabel});
+
+  // One consistent streak colour — flame orange (reserve lime for CTAs).
+  static const Color _flame = Color(0xFFFF7A1A);
 
   @override
   Widget build(BuildContext context) {
@@ -696,23 +726,25 @@ class _StreakDay extends StatelessWidget {
     final Color bg, border, fg;
     switch (state) {
       case _DayState.empty:
-        bg = Colors.transparent;
+        bg = colorScheme.surface;
         border = colorScheme.outlineVariant;
         fg = colorScheme.onSurfaceVariant;
       case _DayState.filled:
-        bg = AppColors.goldPoints.withValues(alpha: 0.15);
-        border = AppColors.goldPoints;
-        fg = AppColors.goldPoints;
+        bg = _flame;
+        border = _flame;
+        fg = Colors.white;
       case _DayState.todayClaimable:
         bg = colorScheme.primary;
         border = colorScheme.primary;
         fg = colorScheme.onPrimary;
       case _DayState.todayDone:
-        bg = AppColors.goldPoints;
-        border = AppColors.goldPoints;
+        bg = _flame;
+        border = _flame;
         fg = Colors.white;
     }
+    final isDone = state == _DayState.filled || state == _DayState.todayDone;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 32,
@@ -723,16 +755,24 @@ class _StreakDay extends StatelessWidget {
             border: Border.all(color: border, width: 1.5),
           ),
           alignment: Alignment.center,
-          child:
-              state == _DayState.filled || state == _DayState.todayDone
-                  ? Icon(Icons.check, size: 16, color: fg)
-                  : Text(
-                    label,
-                    style: AppTypography.labelMedium.copyWith(
-                      color: fg,
-                      fontWeight: FontWeight.w700,
-                    ),
+          child: isDone
+              ? Icon(Icons.check, size: 16, color: fg)
+              : Text(
+                  label,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: fg,
+                    fontWeight: FontWeight.w700,
                   ),
+                ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subLabel ?? '',
+          style: AppTypography.labelSmall.copyWith(
+            color: _flame,
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+          ),
         ),
       ],
     );

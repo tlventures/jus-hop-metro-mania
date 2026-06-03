@@ -172,6 +172,17 @@ Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for s
 
 ## 8. Pending / next steps
 
+### ✅ Completed 3 June 2026 (UI refresh — v1.0.11+12)
+Implemented the full UI priority matrix from the UX review:
+- **Contrast:** Home hero stat pills use a dark scrim (cityInk 55%) instead of low-opacity white → legible in outdoor sun (WCAG).
+- **Games → vertical list:** Play hub grid replaced with full-width list rows (icon · title+2-line description · points/time badges) — no more truncation/dead space.
+- **Ad separation:** ad banner now in its own slot with a divider + solid bg + 16dp gap above the nav bar (prevents mis-taps + AdMob policy).
+- **Streak timeline:** connected line linking the 7 day-circles, completed days fill flame-orange with a check, "+N pts" pull-forward label under tomorrow; copy aligned to auto-claim ("Today secured ✓").
+- **Docked Start Ride:** primary CTA moved to a persistent thumb-zone bar (Home Scaffold bottomNavigationBar); removed from the hero; hidden during an active commute.
+- **Iconography:** replaced chrome emojis (🔥 streak, faint outline trophy) with filled vector icons; one consistent streak colour (flame orange; lime reserved for CTAs).
+- **Haptics:** medium-impact on Start Ride & streak claim, selection-click on game launch.
+- **Deep-link tie-in:** Home "Quick Earn" cards now open the specific game via `/game/:id`.
+
 ### ✅ Completed 3 June 2026 (UX batch — v1.0.9+10)
 - [x] **Profile version** now read at runtime via `package_info_plus` (no longer hardcoded "v1.0.0").
 - [x] **Streaks auto-track:** streak now auto-advances on daily app open (`autoClaimIfDue`); backend resets the streak to day 1 if a day is missed (>48h). No manual tap needed.

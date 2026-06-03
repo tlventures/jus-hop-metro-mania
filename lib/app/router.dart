@@ -209,7 +209,27 @@ class _NavShell extends StatelessWidget {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const MetroSafarAdBanner(),
+          // Ad lives in its own clearly-separated slot: top divider + solid
+          // background + gap below, so it never blends into the nav bar
+          // (prevents accidental taps and satisfies AdMob placement policy).
+          Builder(
+            builder: (context) {
+              final scheme = Theme.of(context).colorScheme;
+              return Container(
+                width: double.infinity,
+                color: scheme.surface,
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+                    const SizedBox(height: 8),
+                    const MetroSafarAdBanner(),
+                  ],
+                ),
+              );
+            },
+          ),
           NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => _navigateToTab(context, index),
