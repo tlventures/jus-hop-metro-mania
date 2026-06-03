@@ -10,6 +10,7 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../services/user_display_name.dart';
+import '../../notifications/application/notifications_provider.dart';
 import '../application/streak_provider.dart';
 import '../application/quest_provider.dart';
 import '../application/home_provider.dart';
@@ -29,13 +30,34 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Single aggregate call — replaces 3–5 separate fetches.
     // Hydrates streak, quests, and wallet summary in one round-trip.
-    Future.microtask(() => ref.read(homeProvider.notifier).fetch());
+    Future.microtask(() {
+      ref.read(homeProvider.notifier).fetch();
+      ref.invalidate(unreadNotificationsProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning to the app (e.g. after tapping/seeing a push) refreshes the
+    // unread bell badge and home data.
+    if (state == AppLifecycleState.resumed && mounted) {
+      ref.invalidate(unreadNotificationsProvider);
+      ref.read(homeProvider.notifier).fetch();
+    }
   }
 
   @override
@@ -89,10 +111,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           style: AppTypography.headlineMedium.copyWith(color: colorScheme.onSurface),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
-            tooltip: 'Notifications',
-            onPressed: () => context.push('/notifications-inbox'),
+          Builder(
+            builder: (context) {
+              final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
+              return IconButton(
+                tooltip: 'Notifications',
+                onPressed: () => context.push('/notifications-inbox'),
+                icon: Badge(
+                  isLabelVisible: unread > 0,
+                  label: Text(unread > 9 ? '9+' : '$unread'),
+                  child: Icon(Icons.notifications_none, color: colorScheme.onSurface),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: Icon(Icons.settings_outlined, color: colorScheme.onSurface),

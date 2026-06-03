@@ -4,6 +4,7 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../services/backend_service.dart';
+import '../application/notifications_provider.dart';
 
 class AppNotification {
   final String id;
@@ -37,11 +38,25 @@ final notificationFeedProvider =
       .toList();
 });
 
-class NotificationsInboxScreen extends ConsumerWidget {
+class NotificationsInboxScreen extends ConsumerStatefulWidget {
   const NotificationsInboxScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationsInboxScreen> createState() =>
+      _NotificationsInboxScreenState();
+}
+
+class _NotificationsInboxScreenState
+    extends ConsumerState<NotificationsInboxScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Opening the inbox marks everything as read → clears the bell badge.
+    Future.microtask(() => markNotificationsReadW(ref));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final async = ref.watch(notificationFeedProvider);
 
