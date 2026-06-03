@@ -4,6 +4,10 @@
          The animated spinner icon is drawn by the OS immediately on tap,
          before the Flutter engine initialises. -->
     <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <!-- DeviceDefault carries a system ActionBar (app label) — disable it,
+             or "MetroSafar" shows as a native title bar above the Flutter UI. -->
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
         <item name="android:windowSplashScreenBackground">@color/launch_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_spinner</item>
         <item name="android:windowSplashScreenAnimationDuration">1200</item>
