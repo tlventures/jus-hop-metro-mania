@@ -96,47 +96,54 @@ class _NotificationsInboxScreenState
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
               itemBuilder: (context, i) {
                 final n = items[i];
-                return Container(
-                  padding: const EdgeInsets.all(AppSpacing.s4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainer,
-                    borderRadius: AppRadius.borderRadiusL,
-                    border: Border.all(color: colorScheme.outline.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.s2),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: AppRadius.borderRadiusM,
+                return GestureDetector(
+                  onTap: () => _showDetail(context, n),
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.s4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainer,
+                      borderRadius: AppRadius.borderRadiusL,
+                      border: Border.all(color: colorScheme.outline.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.s2),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer,
+                            borderRadius: AppRadius.borderRadiusM,
+                          ),
+                          child: Icon(Icons.notifications,
+                              size: 18, color: colorScheme.onPrimaryContainer),
                         ),
-                        child: Icon(Icons.notifications,
-                            size: 18, color: colorScheme.onPrimaryContainer),
-                      ),
-                      const SizedBox(width: AppSpacing.s3),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(n.title,
-                                style: AppTypography.titleSmall.copyWith(
-                                    color: colorScheme.onSurface, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 2),
-                            Text(n.body,
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: colorScheme.onSurfaceVariant)),
-                            if (n.createdAt != null) ...[
-                              const SizedBox(height: AppSpacing.s2),
-                              Text(_relativeTime(n.createdAt!),
-                                  style: AppTypography.labelSmall.copyWith(
-                                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
+                        const SizedBox(width: AppSpacing.s3),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(n.title,
+                                  style: AppTypography.titleSmall.copyWith(
+                                      color: colorScheme.onSurface, fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 2),
+                              Text(n.body,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.bodySmall
+                                      .copyWith(color: colorScheme.onSurfaceVariant)),
+                              if (n.createdAt != null) ...[
+                                const SizedBox(height: AppSpacing.s2),
+                                Text(_relativeTime(n.createdAt!),
+                                    style: AppTypography.labelSmall.copyWith(
+                                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                        Icon(Icons.chevron_right,
+                            size: 18, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -145,6 +152,76 @@ class _NotificationsInboxScreenState
         ),
       ),
     );
+  }
+
+  void _showDetail(BuildContext context, AppNotification n) {
+    final colorScheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s6, 0, AppSpacing.s6, AppSpacing.s6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.s3),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: AppRadius.borderRadiusM,
+                    ),
+                    child: Icon(Icons.notifications,
+                        color: colorScheme.onPrimaryContainer),
+                  ),
+                  const SizedBox(width: AppSpacing.s3),
+                  Expanded(
+                    child: Text(n.title,
+                        style: AppTypography.headlineSmall
+                            .copyWith(color: colorScheme.onSurface)),
+                  ),
+                ],
+              ),
+              if (n.createdAt != null) ...[
+                const SizedBox(height: AppSpacing.s2),
+                Text(_fullTime(n.createdAt!),
+                    style: AppTypography.labelSmall.copyWith(
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8))),
+              ],
+              const SizedBox(height: AppSpacing.s5),
+              Text(n.body,
+                  style: AppTypography.bodyLarge
+                      .copyWith(color: colorScheme.onSurface, height: 1.5)),
+              const SizedBox(height: AppSpacing.s8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _fullTime(DateTime t) {
+    final l = t.toLocal();
+    final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
+    final m = l.minute.toString().padLeft(2, '0');
+    final ampm = l.hour < 12 ? 'AM' : 'PM';
+    return '${l.day}/${l.month}/${l.year} · $h:$m $ampm';
   }
 
   String _relativeTime(DateTime t) {
