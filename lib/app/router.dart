@@ -8,6 +8,7 @@ import '../features/home/presentation/home_screen.dart';
 import '../features/wallet/presentation/wallet_screen.dart';
 import '../features/wallet/presentation/my_redemptions_screen.dart';
 import '../features/notifications/presentation/notifications_inbox_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/play/presentation/play_hub_screen.dart';
 import '../features/play/games/daily_spin_screen.dart';
@@ -130,6 +131,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/notifications-inbox',
       builder: (context, state) => const NotificationsInboxScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
     ),
     // Deep link straight into a specific game (e.g. /game/trivia).
     GoRoute(

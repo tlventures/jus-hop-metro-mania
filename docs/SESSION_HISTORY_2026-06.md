@@ -172,6 +172,11 @@ Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for s
 
 ## 8. Pending / next steps
 
+### ✅ Completed 3 June 2026 (nav/settings restructure — v1.0.13+14)
+- **Home app bar:** added a top AppBar ("MetroSafar") with the 🔔 notifications and ⚙️ settings actions; removed those icons from the greeting header.
+- **Dedicated Settings page:** new `/settings` screen (Preferences: Language, Notifications, Weekly Digest, Friend Leaderboard, Invite, Dark Mode · Legal & Help: Privacy, Terms, Support · Sign Out · Delete Account · version). Gear icon → `/settings` (was `/profile`).
+- **Profile slimmed:** now just the identity card + Your Activity + a "Settings, legal & account" pointer row. All settings/legal/account moved out to the Settings page.
+
 ### ✅ Completed 3 June 2026 (UI refresh — v1.0.11+12)
 Implemented the full UI priority matrix from the UX review:
 - **Contrast:** Home hero stat pills use a dark scrim (cityInk 55%) instead of low-opacity white → legible in outdoor sun (WCAG).

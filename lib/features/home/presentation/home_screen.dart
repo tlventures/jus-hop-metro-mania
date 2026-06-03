@@ -65,6 +65,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        backgroundColor: colorScheme.surface,
+        title: Text(
+          'MetroSafar',
+          style: AppTypography.headlineMedium.copyWith(color: colorScheme.onSurface),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/notifications-inbox'),
+          ),
+          IconButton(
+            icon: Icon(Icons.settings_outlined, color: colorScheme.onSurface),
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
+          ),
+          const SizedBox(width: AppSpacing.s2),
+        ],
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -313,22 +333,6 @@ class _CompactHeader extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.notifications_none,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            onPressed: () => context.push('/notifications-inbox'),
-            tooltip: 'Notifications',
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.settings_outlined,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            onPressed: () => context.go('/profile'),
-            tooltip: '',
           ),
         ],
       ),
