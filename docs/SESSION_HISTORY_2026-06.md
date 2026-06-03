@@ -173,6 +173,7 @@ Status legend: 🔴 blocker (store rejects or app broken) · 🟠 required for s
 ## 8. Pending / next steps
 
 ### ✅ Completed 3 June 2026
+- [x] **Fixed admin "not loading".** Root cause: the admin `Dockerfile` didn't declare the `NEXT_PUBLIC_*` build args, so `cloudbuild.yaml`'s `--build-arg` values never reached `next build` → Firebase config compiled to `undefined` → Firebase Auth couldn't init → blank app (shell returned 200 but JS bundle had no config). Fix: added `ARG`+`ENV` for all 7 vars in the Dockerfile, rebuilt → revision `metrosafar-admin-00002-sfp`. Verified `metrosafar-5bcff` config is now present in the served JS bundle.
 - [x] **Removed `ADMIN_API_KEY`** from the backend env (revision `00011-sbf`). Verified the key is now rejected. Admin access is solely Firebase + RBAC. Temp key file shredded.
 - [x] **Catalog seeded** to `metrosafar-20260517-223707` Firestore — 38 docs with exact db.json IDs, via `scripts/seed-via-rest.js` (Firestore REST + gcloud owner token; local Admin-SDK ADC lacked Firestore write perms). Backend `onSnapshot` picked it up; `/api/catalog/rewards` confirms 16 rewards live.
 - [x] **Firestore composite indexes created** (async build) and recorded in `firestore.indexes.json`:
