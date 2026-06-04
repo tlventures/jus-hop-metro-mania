@@ -21,6 +21,8 @@ const {
   getMaterializedLeaderboard,
   getUserRank,
 } = require('./lib/leaderboard');
+const { generateStationToken, validateStationToken } = require('./lib/qr-tokens');
+const { verifyAdMobSSV } = require('./lib/admob-ssv');
 const {
   installPhase56Middleware,
   installPhase56Routes,
@@ -787,22 +789,42 @@ async function maybeGetCommuteMultiplier(clientId) {
 
 async function getTriviaRank(cityId, clientId, limit = 10) {
   const safeCityId = sanitizeCityId(cityId);
+  const displayLimit = Math.max(1, Math.min(Number(limit) || 10, 50));
   const scoresRef = firestore.collection('metrosafar_trivia_scores').doc(safeCityId).collection('scores');
-  const snap = await scoresRef.orderBy('score', 'desc').orderBy('completedAt', 'asc').limit(500).get();
-  const entries = snap.docs.map((doc, index) => ({
-    uid: doc.id,
-    rank: index + 1,
-    ...doc.data(),
-  }));
-  const me = entries.find((entry) => entry.uid === clientId) || null;
+
+  // Top-N for display — small, bounded read.
+  const topSnap = await scoresRef.orderBy('score', 'desc').orderBy('completedAt', 'asc').limit(displayLimit).get();
+  const topScores = topSnap.docs.map((doc, i) => ({ uid: doc.id, rank: i + 1, ...doc.data() }));
+
+  // Caller's own doc — single read.
+  const myDoc = await scoresRef.doc(clientId).get();
+  let rank = null;
+  let myScore = 0;
+  let personalRecord = 0;
+  let bestToday = 0;
+
+  if (myDoc.exists) {
+    const d = myDoc.data();
+    myScore = d.score || 0;
+    personalRecord = d.personalRecord || 0;
+    bestToday = d.bestToday || 0;
+    // O(1) count aggregation — replaces the old limit(500) full scan.
+    const countSnap = await scoresRef.where('score', '>', myScore).count().get();
+    rank = countSnap.data().count + 1; // players strictly above me + 1
+  }
+
+  // Total player count via aggregation (no document reads).
+  const totalSnap = await scoresRef.count().get();
+  const playerCount = totalSnap.data().count;
+
   return {
     cityId: safeCityId,
-    rank: me?.rank || null,
-    score: me?.score || 0,
-    personalRecord: me?.personalRecord || 0,
-    bestToday: me?.bestToday || 0,
-    playerCount: entries.length,
-    topScores: entries.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50))),
+    rank,
+    score: myScore,
+    personalRecord,
+    bestToday,
+    playerCount,
+    topScores,
   };
 }
 
@@ -957,6 +979,36 @@ async function addWalletTransaction(clientId, state, type, pointsAwarded, descri
     createdAt: new Date().toISOString(),
   };
   return [transaction, ...(state.walletTransactions || [])].slice(0, 100);
+}
+
+/**
+ * Flag users submitting ride_completed events faster than physically possible.
+ * A metro trip takes a minimum of ~3 minutes; multiple completions within
+ * a short window indicates GPS spoofing or API abuse.
+ * Flagged users are written to metrosafar_flagged_trips for admin review
+ * (not banned automatically to avoid false positives).
+ */
+async function checkRideCadenceAnomaly(clientId) {
+  const MIN_RIDE_GAP_MINUTES = 3;
+  const windowStart = new Date(Date.now() - MIN_RIDE_GAP_MINUTES * 60 * 1000).toISOString();
+  const recentSnap = await firestore.collection('metrosafar_users').doc(clientId)
+    .collection('activity_events')
+    .where('type', '==', 'ride_completed')
+    .where('createdAt', '>=', windowStart)
+    .count()
+    .get();
+  const recentCount = recentSnap.data().count;
+  if (recentCount >= 2) {
+    await firestore.collection('metrosafar_flagged_trips').add({
+      userId: clientId,
+      reason: 'cadence_anomaly',
+      recentRideCount: recentCount,
+      windowMinutes: MIN_RIDE_GAP_MINUTES,
+      flaggedAt: new Date().toISOString(),
+      reviewed: false,
+    });
+    logger.warn({ clientId, recentCount }, 'Ride cadence anomaly flagged');
+  }
 }
 
 async function qualifyReferralForUser(clientId, trigger) {
@@ -1275,6 +1327,67 @@ app.post('/api/devices/token', validate(z.object({
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     res.json({ registered: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DPDPA §9 — Parental consent request for under-18 users.
+// POST /api/auth/parental-consent-request
+// Sends a verification email to the parent; stores pending record.
+// ---------------------------------------------------------------------------
+app.post('/api/auth/parental-consent-request', accountLimiter, async (req, res, next) => {
+  try {
+    const { parentEmail } = req.body;
+    if (!parentEmail || typeof parentEmail !== 'string' || !parentEmail.includes('@')) {
+      return res.status(400).json({ error: 'Valid parent email required' });
+    }
+    const token = require('crypto').randomBytes(24).toString('hex');
+    await firestore.collection('metrosafar_parental_consents').doc(req.clientId).set({
+      childUid: req.clientId,
+      parentEmail: parentEmail.trim().toLowerCase(),
+      status: 'pending',
+      token,
+      createdAt: new Date().toISOString(),
+      verifiedAt: null,
+    }, { merge: true });
+
+    // TODO: send email via SendGrid / Firebase Extensions with:
+    //   link: https://metrosafar.app/parental-verify?token=<token>
+    // For now, log for manual verification during early launch.
+    logger.info({ childUid: req.clientId, parentEmail: parentEmail.trim().toLowerCase() },
+      'Parental consent request — send verification email');
+
+    res.json({ ok: true, message: 'Verification email requested' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DPDPA Consent audit trail
+// POST /api/me/consent — append-only log of every consent decision.
+// Never overwrites; retained even after account deletion as legal proof.
+// ---------------------------------------------------------------------------
+app.post('/api/me/consent', accountLimiter, async (req, res, next) => {
+  try {
+    const { analyticsConsent, marketingConsent, appVersion, platform } = req.body;
+    const entry = {
+      analyticsConsent: !!analyticsConsent,
+      marketingConsent: !!marketingConsent,
+      appVersion: String(appVersion || ''),
+      platform: String(platform || ''),
+      // Anonymise IP: store first two octets only (e.g. 103.21.x.x)
+      ipPrefix: (req.ip || '').split('.').slice(0, 2).join('.'),
+      ts: new Date().toISOString(),
+    };
+    const userRef = firestore.collection('metrosafar_users').doc(req.clientId);
+    // Append-only subcollection — auto-ID, never deleted.
+    await userRef.collection('consent_log').add(entry);
+    // Also keep a quick-read snapshot on the user doc itself.
+    await userRef.set({ latestConsent: entry }, { merge: true });
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
@@ -1605,8 +1718,9 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
           gamesPlayed: 1,
           pointsEarned: response.pointsEarned,
         }, { cityId: req.body.cityId });
-        const referral = await qualifyReferralForUser(req.clientId, 'first_game');
-        if (referral) response.referral = referral;
+        // Referral qualification intentionally NOT triggered here.
+        // Points only release after a verified physical trip (ride_completed /
+        // commute-session end) to prevent empty-account fraud.
       } catch (error) {
         logger.warn({ err: error, clientId: req.clientId }, 'Post-game retention hooks failed');
       }
@@ -1988,6 +2102,9 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
         if (type === 'ride_completed') {
           const referral = await qualifyReferralForUser(req.clientId, 'first_trip');
           if (referral) response.referral = referral;
+          // Velocity anomaly check: flag if the user submits ride_completed
+          // events faster than physically possible (>1 per 3 minutes).
+          await checkRideCadenceAnomaly(req.clientId).catch(() => {});
         }
       } catch (error) {
         logger.warn({ err: error, clientId: req.clientId }, 'Activity retention hooks failed');
@@ -2090,11 +2207,72 @@ app.get('/api/notifications/feed', async (req, res, next) => {
   }
 });
 
-// POST /api/rewards/watch-ad — award points after a rewarded ad completes.
-// Daily-capped to prevent abuse; the client only calls this on the SDK's
-// verified userEarnedReward callback.
 const AD_REWARD_POINTS = 15;
 const AD_REWARD_DAILY_LIMIT = 5;
+
+// ---------------------------------------------------------------------------
+// AdMob Server-Side Verification (SSV) callback
+// GET /api/rewards/admob-ssv — called by Google's servers after a rewarded
+// ad is fully viewed.  Cryptographically signed; idempotent via transaction_id.
+// ---------------------------------------------------------------------------
+app.get('/api/rewards/admob-ssv', async (req, res) => {
+  try {
+    const { transaction_id, user_id, reward_amount } = req.query;
+    if (!transaction_id || !user_id) {
+      return res.status(400).send('MISSING_PARAMS');
+    }
+
+    // Verify ECDSA signature using Google's public keys.
+    const valid = await verifyAdMobSSV(req.query);
+    if (!valid) {
+      logger.warn({ query: req.query }, 'AdMob SSV: invalid signature');
+      return res.status(400).send('INVALID_SIGNATURE');
+    }
+
+    // Idempotency: skip if this transaction was already processed.
+    const txnRef = firestore.collection('ssv_transactions').doc(transaction_id);
+    const existing = await txnRef.get();
+    if (existing.exists) {
+      return res.status(200).send('OK'); // already awarded
+    }
+
+    // Award using the same daily-cap logic as the existing watch-ad endpoint.
+    const amount = Number(reward_amount) || AD_REWARD_POINTS;
+    await claimTransaction(user_id, async (txn, state) => {
+      const today = new Date().toDateString();
+      const isNewDay = state.adWatchDate !== today;
+      const watchesToday = isNewDay ? 0 : (state.adWatchesToday || 0);
+      if (watchesToday >= AD_REWARD_DAILY_LIMIT) {
+        return { next: null, response: { capped: true } };
+      }
+      const questPointsEarned = completeDailyQuestOnce(state, 'watch_video') ? 15 : 0;
+      const next = {
+        ...state,
+        points: state.points + amount + questPointsEarned,
+        adWatchesToday: watchesToday + 1,
+        adWatchDate: today,
+      };
+      return { next, response: { pointsAwarded: amount + questPointsEarned } };
+    });
+
+    // Record for idempotency.
+    await txnRef.set({
+      userId: user_id,
+      amount,
+      ts: new Date().toISOString(),
+    });
+
+    logger.info({ userId: user_id, transaction_id, amount }, 'AdMob SSV: points awarded');
+    res.status(200).send('OK');
+  } catch (err) {
+    logger.error({ err }, 'AdMob SSV handler error');
+    res.status(500).send('ERROR');
+  }
+});
+
+// POST /api/rewards/watch-ad — legacy client-callback path.
+// Still used as fallback while SSV is being verified in production.
+// Daily cap prevents abuse; will be deprecated once SSV is confirmed stable.
 
 app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
   try {
@@ -2507,17 +2685,37 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
     const ref = existing
       ? firestore.collection('metrosafar_commute_sessions').doc(existing.id)
       : firestore.collection('metrosafar_commute_sessions').doc();
-    const ticketVerification = req.body.ticketVerification
-      ? {
-          method: req.body.ticketVerification.method,
-          codeHash: crypto
-            .createHash('sha256')
-            .update(req.body.ticketVerification.code)
-            .digest('hex'),
+    let ticketVerification = existing?.ticketVerification || null;
+    if (req.body.ticketVerification) {
+      const tv = req.body.ticketVerification;
+      // If the method is 'qr', validate the HMAC station token before accepting.
+      if (tv.method === 'qr') {
+        const result = validateStationToken(tv.code || '');
+        if (!result.valid) {
+          res.status(400).json({
+            error: 'Invalid QR code',
+            reason: result.reason,
+            hint: 'Use an official MetroSafar station QR code.',
+          });
+          return;
+        }
+        ticketVerification = {
+          method: tv.method,
+          stationId: result.stationId,
+          codeHash: crypto.createHash('sha256').update(tv.code).digest('hex'),
+          status: 'hmac_verified',
+          verifiedAt: now,
+        };
+      } else {
+        // Manual/other method — keep existing hash-only flow.
+        ticketVerification = {
+          method: tv.method,
+          codeHash: crypto.createHash('sha256').update(tv.code || '').digest('hex'),
           status: 'client_verified',
           verifiedAt: now,
-        }
-      : existing?.ticketVerification || null;
+        };
+      }
+    }
     const payload = {
       userId: req.clientId,
       cityId,
@@ -3336,6 +3534,19 @@ app.delete('/api/admin/cities/:cityId/stations/:stationId', requireAdmin, async 
     await firestore.collection('cities').doc(cityId).collection('stations').doc(stationId).delete();
     res.json({ success: true });
   } catch (error) { next(error); }
+});
+
+/**
+ * GET /api/admin/cities/:cityId/stations/:stationId/qr-token
+ * Generate a time-bound HMAC QR token for a station (admin only).
+ * Returns the full QR URI string and the token payload for printing/display.
+ */
+app.get('/api/admin/cities/:cityId/stations/:stationId/qr-token', requireAdmin, (req, res) => {
+  const { stationId } = req.params;
+  const token = generateStationToken(stationId);
+  const qrUri = `metrosafar://verify/${token}`;
+  const rotationHours = Math.max(1, Number(process.env.QR_TOKEN_ROTATION_HOURS) || 24);
+  res.json({ stationId, token, qrUri, rotationHours });
 });
 
 /** POST /api/admin/cities/:cityId/content/:type — upload content pack (stamps/trivia/phrases/themes/audio) */

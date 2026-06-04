@@ -1,10 +1,18 @@
+import '../core/compliance/minor_status.dart';
+
 class AdMobConfig {
   AdMobConfig._();
 
-  static const bool adsEnabled = bool.fromEnvironment(
-    'METROSAFAR_ADS_ENABLED',
-    defaultValue: true,
-  );
+  /// Returns false for under-18 users (DPDPA §9 — no ads to minors),
+  /// and false when the compile-time flag is off (e.g. test builds).
+  /// Runtime getter so it can read [MinorStatus.isMinorCached].
+  static bool get adsEnabled {
+    if (MinorStatus.isMinorCached) return false;
+    return const bool.fromEnvironment(
+      'METROSAFAR_ADS_ENABLED',
+      defaultValue: true,
+    );
+  }
 
   static const String androidBannerAdUnitId = String.fromEnvironment(
     'ADMOB_ANDROID_BANNER_UNIT_ID',

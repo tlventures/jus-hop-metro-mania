@@ -38,9 +38,9 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
           ),
         );
 
-  // 7 pages: welcome(0), games(1), learn(2), rewards(3), permissions(4),
-  // cityConfirm(5), privacyConsent(6)
-  static const int _totalSteps = 6;
+  // 9 pages: welcome(0), ageGate(1), parentalConsent(2), games(3), learn(4),
+  // rewards(5), permissions(6), cityConfirm(7), privacyConsent(8)
+  static const int _totalSteps = 8;
 
   void nextStep() {
     if (state.currentStep < _totalSteps) {

@@ -89,6 +89,35 @@ class BackendService {
     return _sendJson('POST', '/api/rewards/watch-ad', cacheKey: 'cache_ad_reward');
   }
 
+  /// DPDPA §9: request a parental consent verification email for a minor.
+  Future<Map<String, dynamic>> requestParentalConsent({
+    required String parentEmail,
+  }) {
+    return _sendJson('POST', '/api/auth/parental-consent-request', body: {
+      'parentEmail': parentEmail,
+    });
+  }
+
+  /// DPDPA: record consent decision to the append-only server-side audit log.
+  /// Fire-and-forget safe — caller should not block on failure.
+  Future<void> recordConsent({
+    required bool analyticsConsent,
+    required bool marketingConsent,
+    required String appVersion,
+    required String platform,
+  }) async {
+    try {
+      await _sendJson('POST', '/api/me/consent', body: {
+        'analyticsConsent': analyticsConsent,
+        'marketingConsent': marketingConsent,
+        'appVersion': appVersion,
+        'platform': platform,
+      });
+    } catch (e) {
+      debugPrint('BackendService.recordConsent: $e (non-fatal)');
+    }
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getProfile() {
@@ -743,7 +772,7 @@ class BackendService {
   Future<Map<String, dynamic>> _sendJson(
     String method,
     String path, {
-    required String cacheKey,
+    String? cacheKey,           // null = no cache (write/action endpoints)
     Map<String, dynamic>? body,
     bool queueOffline = false,
   }) async {
@@ -776,7 +805,7 @@ class BackendService {
 
       final prefs = await SharedPreferences.getInstance();
       if (response.body.isNotEmpty) {
-        await prefs.setString(cacheKey, response.body);
+        if (cacheKey != null) await prefs.setString(cacheKey, response.body);
         return Map<String, dynamic>.from(
           jsonDecode(response.body) as Map<String, dynamic>,
         );

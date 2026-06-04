@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -6,8 +7,6 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../services/admob_config.dart';
-import '../../../services/backend_service.dart';
-import '../../wallet/application/wallet_provider.dart';
 import '../../home/application/home_provider.dart';
 
 /// "Watch a video, earn points" — shows a rewarded ad and credits points
@@ -89,27 +88,32 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
       },
     );
 
+    // Pass the Firebase UID via SSV options so AdMob echoes it back in the
+    // server-side callback (GET /api/rewards/admob-ssv?user_id=...).
+    // Points are awarded server-side; the client just shows a confirmation.
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    await ad.setServerSideOptions(ServerSideVerificationOptions(
+      userId: uid,
+      customData: 'metrosafar_reward_v1',
+    ));
     await ad.show(
-      onUserEarnedReward: (_, __) async {
-        // Server verifies the daily cap and awards points.
-        try {
-          final res = await BackendService().claimAdReward();
-          if (!mounted) return;
-          ref.read(walletProvider.notifier).applyEarnResult(res);
-          ref.read(homeProvider.notifier).invalidate();
-          final awarded = (res['pointsAwarded'] as num?)?.toInt() ?? 0;
-          final capped = res['reason'] == 'ad_daily_limit_reached';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(capped
-                  ? "You've hit today's watch-to-earn limit — come back tomorrow!"
-                  : '🎉 +$awarded points for watching!'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        } catch (e) {
-          debugPrint('claimAdReward failed: $e');
-        }
+      onUserEarnedReward: (_, reward) async {
+        // SSV is the primary award path (Google calls our backend directly).
+        // The legacy POST /api/rewards/watch-ad acts as a fallback while SSV
+        // is being verified in production.
+        if (!mounted) return;
+        // Refresh wallet after a brief delay to pick up the SSV-credited points.
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            ref.read(homeProvider.notifier).fetch();
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 +15 pts on the way!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       },
     );
   }

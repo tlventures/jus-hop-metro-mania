@@ -99,12 +99,7 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/ride',
-          builder:
-              (context, state) => FeatureGate(
-                featureName: 'Ride Mode',
-                enabled: (flags) => flags.tripMode,
-                child: const TripModeScreen(),
-              ),
+          builder: (context, state) => const TripModeScreen(),
         ),
         GoRoute(
           path: '/play',
@@ -223,13 +218,17 @@ class _NavShell extends StatelessWidget {
               return Container(
                 width: double.infinity,
                 color: scheme.surface,
-                padding: const EdgeInsets.only(bottom: 16),
+                // 24px top gap (was 8) + 24px bottom gap (was 16).
+                // Keeps the ad ≥24px away from any interactive nav target,
+                // satisfying AdMob placement policy and reducing accidental taps.
+                padding: const EdgeInsets.only(bottom: 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 24),
                     const MetroSafarAdBanner(),
+                    const SizedBox(height: 8), // clearance below the ad unit itself
                   ],
                 ),
               );

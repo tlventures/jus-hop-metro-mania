@@ -52,6 +52,8 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
     Navigator.of(context).pop(RideVerification(method: _method, code: code));
   }
 
+  static const _kQrPrefix = 'metrosafar://verify/';
+
   void _handleScan(BarcodeCapture capture) {
     if (_handledScan) return;
     final rawValue = capture.barcodes
@@ -59,11 +61,33 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
         .whereType<String>()
         .firstWhere((value) => value.trim().isNotEmpty, orElse: () => '');
     if (rawValue.isEmpty) return;
+
+    // Reject payloads that don't match the official MetroSafar URI scheme.
+    // This prevents quishing attacks (malicious QR stickers at stations) and
+    // ensures only our cryptographically signed tokens reach the backend.
+    if (!rawValue.startsWith(_kQrPrefix)) {
+      _handledScan = false; // allow a re-scan
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid QR code — please scan an official MetroSafar station code.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Extract the HMAC token from the URI (everything after the prefix).
+    final token = rawValue.substring(_kQrPrefix.length).trim();
+    if (token.isEmpty) {
+      _handledScan = false;
+      return;
+    }
+
     _handledScan = true;
     setState(() {
       _method = 'qr';
       _showScanner = false;
-      _controller.text = rawValue.trim();
+      _controller.text = token;
     });
   }
 

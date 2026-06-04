@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:geolocator/geolocator.dart';
+import 'package:safe_device/safe_device.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../models/metro_station.dart';
@@ -43,6 +44,12 @@ class CommuteDetector {
     _lastLocationSample = now;
 
     try {
+      // Silently skip location award if the device is spoofing GPS.
+      // Fail-OPEN (return true) on plugin errors so genuine edge-cases
+      // (e.g. plugin unavailable) are not penalised.
+      final trustworthy = await _deviceTrustworthy();
+      if (!trustworthy) return;
+
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -82,6 +89,19 @@ class CommuteDetector {
           vibrationScore: vibrationScore,
         ),
       );
+    }
+  }
+
+  /// Returns false if the device is running mock locations or is an emulator.
+  /// Fail-OPEN on plugin error (returns true) to avoid false-positives on
+  /// genuine devices where the plugin can't execute.
+  Future<bool> _deviceTrustworthy() async {
+    try {
+      final isMock = await SafeDevice.isMockLocation;
+      final isReal = await SafeDevice.isRealDevice;
+      return isReal && !isMock;
+    } catch (_) {
+      return true; // fail-open
     }
   }
 

@@ -19,10 +19,11 @@ import 'core/city/city_theme_provider.dart';
 import 'core/city/current_city_provider.dart';
 import 'design_system/theme.dart';
 import 'features/splash/presentation/splash_screen.dart';
-import 'services/connectivity_watcher.dart';
-import 'services/backend_service.dart';
-import 'services/localization_service.dart';
+import 'core/compliance/minor_status.dart';
 import 'services/analytics_service.dart';
+import 'services/backend_service.dart';
+import 'services/connectivity_watcher.dart';
+import 'services/localization_service.dart';
 import 'services/notification_service.dart';
 
 void main() {
@@ -73,6 +74,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
       };
 
       await initializeServices();
+      // Hydrate minor-status cache BEFORE AdMob init and analytics wiring
+      // so all gates have the correct value on the very first frame.
+      await MinorStatus.hydrate();
       _wireAuthBoundServices();
       await router_module.initializeRouter();
       ConnectivityWatcher.instance.start(BackendService());
@@ -152,7 +156,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void _wireAuthBoundServices() {
   FirebaseAuth.instance.authStateChanges().listen((user) {
-    unawaited(AnalyticsService.setUserId(user?.uid));
+    // DPDPA §9 — no behavioural analytics for under-18 users.
+    if (!MinorStatus.isMinorCached) {
+      unawaited(AnalyticsService.setUserId(user?.uid));
+    }
     if (user != null) {
       unawaited(NotificationService.instance.init());
     }

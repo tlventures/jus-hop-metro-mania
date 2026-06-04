@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../design_system/tokens/radius.dart';
 import '../../../../design_system/tokens/spacing.dart';
 import '../../../../design_system/tokens/typography.dart';
+import '../../../../services/backend_service.dart';
 
 class PrivacyConsentScreen extends StatefulWidget {
   final VoidCallback onAccept;
@@ -22,6 +26,33 @@ class PrivacyConsentScreen extends StatefulWidget {
 class _PrivacyConsentScreenState extends State<PrivacyConsentScreen> {
   bool analyticsConsent = false;
   bool marketingConsent = false;
+  bool _saving = false;
+
+  /// Record the consent decision to the server-side DPDPA audit log, then
+  /// invoke the callback. Fire-and-forget: if the network call fails we still
+  /// proceed (the record will be retried on the next consent interaction).
+  Future<void> _recordAndProceed(bool accepted) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final info = await PackageInfo.fromPlatform();
+      await BackendService().recordConsent(
+        analyticsConsent: analyticsConsent,
+        marketingConsent: marketingConsent,
+        appVersion: info.version,
+        platform: Platform.isAndroid ? 'android' : 'ios',
+      );
+    } catch (_) {
+      // Non-fatal — consent record is best-effort at this stage.
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    if (accepted) {
+      widget.onAccept();
+    } else {
+      widget.onDecline();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,35 +99,43 @@ class _PrivacyConsentScreenState extends State<PrivacyConsentScreen> {
                 },
               ),
               const SizedBox(height: AppSpacing.s6),
-              // Privacy links
+              // Privacy links — must point to live, reachable URLs (Play Store requirement).
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _PrivacyLink(
                     label: 'Privacy Policy',
-                    url: '/privacy',
+                    url: 'https://metrosafar.app/privacy',
                   ),
                   _PrivacyLink(
-                    label: 'Terms',
-                    url: '/terms',
+                    label: 'Terms of Service',
+                    url: 'https://metrosafar.app/terms',
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.s8),
-              // Buttons
+              // Buttons — both record the decision (accept or decline) to the
+              // server-side DPDPA audit log before proceeding.
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: widget.onDecline,
+                      onPressed: _saving ? null : () => _recordAndProceed(false),
                       child: const Text('Decline'),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s4),
                   Expanded(
                     child: FilledButton(
-                      onPressed: analyticsConsent ? widget.onAccept : null,
-                      child: const Text('Accept'),
+                      onPressed: (analyticsConsent && !_saving)
+                          ? () => _recordAndProceed(true)
+                          : null,
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Accept'),
                     ),
                   ),
                 ],
@@ -185,7 +224,8 @@ class _PrivacyLink extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        launchUrl(Uri.parse('https://metrosafar.app$url'));
+        // url is now a full absolute URL passed in by the caller.
+        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       },
       child: Text(
         label,

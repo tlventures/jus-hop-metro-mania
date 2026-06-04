@@ -63,6 +63,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    // Wait for core data (streak, quests, wallet) to load before rendering.
+    // This prevents the flicker of stale defaults while data is fetching.
+    final homeAsync = ref.watch(homeProvider);
+    if (homeAsync.isLoading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+          ),
+        ),
+      );
+    }
+    if (homeAsync.hasError) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(
+          child: TextButton(
+            onPressed: () => ref.read(homeProvider.notifier).fetch(),
+            child: const Text('Reload'),
+          ),
+        ),
+      );
+    }
+
     final streak = ref.watch(streakProvider);
     final quests = ref.watch(questsProvider);
     final wallet = ref.watch(walletProvider);
