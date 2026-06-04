@@ -127,37 +127,37 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
                   ),
                   child: Row(
                     children: [
-                      // Day
+                      // Day — item 0 is a "– –" sentinel; real days at 1–31
                       Expanded(
                         child: _LabelledPicker(
                           label: 'Day',
                           controller: _dayCtrl,
-                          itemCount: 31,
-                          labelBuilder: (i) => '${i + 1}',
-                          onChanged: (i) => setState(() => _day = i + 1),
+                          itemCount: 32,           // 1 sentinel + 31 days
+                          labelBuilder: (i) => i == 0 ? '– –' : '$i',
+                          onChanged: (i) => setState(() => _day = i == 0 ? null : i),
                         ),
                       ),
                       _divider(colorScheme),
-                      // Month
+                      // Month — item 0 is a "– –" sentinel; real months at 1–12
                       Expanded(
                         flex: 2,
                         child: _LabelledPicker(
                           label: 'Month',
                           controller: _monthCtrl,
-                          itemCount: 12,
-                          labelBuilder: (i) => _monthName(i + 1),
-                          onChanged: (i) => setState(() => _month = i + 1),
+                          itemCount: 13,           // 1 sentinel + 12 months
+                          labelBuilder: (i) => i == 0 ? '– – –' : _monthName(i),
+                          onChanged: (i) => setState(() => _month = i == 0 ? null : i),
                         ),
                       ),
                       _divider(colorScheme),
-                      // Year
+                      // Year — item 0 is a "– – – –" sentinel; real years follow
                       Expanded(
                         child: _LabelledPicker(
                           label: 'Year',
                           controller: _yearCtrl,
-                          itemCount: totalYears,
-                          labelBuilder: (i) => '${_minYear + i}',
-                          onChanged: (i) => setState(() => _year = _minYear + i),
+                          itemCount: totalYears + 1, // 1 sentinel + years
+                          labelBuilder: (i) => i == 0 ? '– – – –' : '${_minYear + i - 1}',
+                          onChanged: (i) => setState(() => _year = i == 0 ? null : _minYear + i - 1),
                         ),
                       ),
                     ],

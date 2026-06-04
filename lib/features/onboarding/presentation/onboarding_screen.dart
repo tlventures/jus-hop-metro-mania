@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router.dart' show setOnboardingComplete;
 import '../../../core/city/current_city_provider.dart';
-import '../../../core/compliance/minor_status.dart';
 import '../application/onboarding_provider.dart';
 import 'screens/age_gate_screen.dart';
 import 'screens/city_confirm_screen.dart';
@@ -64,6 +63,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _completeOnboarding();
   }
 
+  /// For under-18 users: show the parental consent screen as a full-screen
+  /// modal route (not a PageView page) to avoid the pre-build race condition.
+  /// Advances to the next onboarding page after the modal is dismissed.
+  void _showParentalConsentModal(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => ParentalConsentScreen(
+          onContinue: () {
+            Navigator.of(context).pop();
+            _nextStep();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -89,43 +105,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               onSkip: _skipOnboarding,
             ),
             // Page 1 – Age gate (DPDPA §9)
-            AgeGateScreen(
+            // For adults: onAdult → _nextStep advances the PageView.
+            // For minors: onMinor → shows ParentalConsentScreen as a modal
+            //   (not a PageView page, avoiding PageView pre-build race),
+            //   then advances into the same next page when dismissed.
+            Builder(builder: (ctx) => AgeGateScreen(
               onAdult: _nextStep,
-              onMinor: _nextStep, // both advance; onMinor proceeds to parental-consent (page 2)
+              onMinor: () => _showParentalConsentModal(ctx),
               onBack: _previousStep,
-            ),
-            // Page 2 – Parental consent (only reached by minors; adults skip via _nextStep)
-            // Adults will land here but the screen detects isMinorCached=false and auto-advances.
-            _ParentalConsentGate(
-              onContinue: _nextStep,
-              onBack: _previousStep,
-            ),
-            // Page 3 – Play features
+            )),
+            // Page 2 – Play features
             GamesFeatureScreen(
               onNext: _nextStep,
               onBack: _previousStep,
             ),
-            // Page 4 – Learn features
+            // Page 3 – Learn features
             LearnFeatureScreen(
               onNext: _nextStep,
               onBack: _previousStep,
             ),
-            // Page 5 – Rewards
+            // Page 4 – Rewards
             RewardsFeatureScreen(
               onNext: _nextStep,
               onBack: _previousStep,
             ),
-            // Page 6 – Location & notification permissions
+            // Page 5 – Location & notification permissions
             PermissionsScreen(
               onComplete: _nextStep,
               onBack: _previousStep,
             ),
-            // Page 7 – City detection & confirmation
+            // Page 6 – City detection & confirmation
             CityConfirmScreen(
               onCityConfirmed: _onCityConfirmed,
               onBack: _previousStep,
             ),
-            // Page 8 – Privacy consent
+            // Page 7 – Privacy consent
             PrivacyConsentScreen(
               onAccept: _completeOnboarding,
               onDecline: _completeOnboarding,
@@ -137,19 +151,3 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 }
 
-/// Auto-skips for adults. Shows [ParentalConsentScreen] only for under-18 users.
-class _ParentalConsentGate extends StatelessWidget {
-  final VoidCallback onContinue;
-  final VoidCallback? onBack;
-  const _ParentalConsentGate({required this.onContinue, this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!MinorStatus.isMinorCached) {
-      // Adult — skip this page immediately on the next frame.
-      WidgetsBinding.instance.addPostFrameCallback((_) => onContinue());
-      return const SizedBox.shrink();
-    }
-    return ParentalConsentScreen(onContinue: onContinue, onBack: onBack);
-  }
-}

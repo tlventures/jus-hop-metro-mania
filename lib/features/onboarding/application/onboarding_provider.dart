@@ -38,9 +38,10 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
           ),
         );
 
-  // 9 pages: welcome(0), ageGate(1), parentalConsent(2), games(3), learn(4),
-  // rewards(5), permissions(6), cityConfirm(7), privacyConsent(8)
-  static const int _totalSteps = 8;
+  // 8 pages: welcome(0), ageGate(1), games(2), learn(3),
+  // rewards(4), permissions(5), cityConfirm(6), privacyConsent(7)
+  // ParentalConsent is shown as a modal overlay, not a PageView page.
+  static const int _totalSteps = 7;
 
   void nextStep() {
     if (state.currentStep < _totalSteps) {
