@@ -172,39 +172,50 @@ class _NotificationsInboxScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Source row — small brand identity line.
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.s3),
+                    width: 40, height: 40,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
-                      borderRadius: AppRadius.borderRadiusM,
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.notifications,
-                        color: colorScheme.onPrimaryContainer),
+                        size: 20, color: colorScheme.onPrimaryContainer),
                   ),
                   const SizedBox(width: AppSpacing.s3),
                   Expanded(
-                    child: Text(n.title,
-                        style: AppTypography.headlineSmall
-                            .copyWith(color: colorScheme.onSurface)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('MetroSafar',
+                            style: AppTypography.labelMedium.copyWith(
+                                color: colorScheme.onSurface, fontWeight: FontWeight.w700)),
+                        if (n.createdAt != null)
+                          Text(_fullTime(n.createdAt!),
+                              style: AppTypography.labelSmall.copyWith(
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8))),
+                      ],
+                    ),
                   ),
                 ],
               ),
-              if (n.createdAt != null) ...[
-                const SizedBox(height: AppSpacing.s2),
-                Text(_fullTime(n.createdAt!),
-                    style: AppTypography.labelSmall.copyWith(
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8))),
-              ],
               const SizedBox(height: AppSpacing.s5),
+              Text(n.title,
+                  style: AppTypography.headlineSmall.copyWith(
+                      color: colorScheme.onSurface, fontWeight: FontWeight.w800)),
+              const SizedBox(height: AppSpacing.s3),
               Text(n.body,
                   style: AppTypography.bodyLarge
-                      .copyWith(color: colorScheme.onSurface, height: 1.5)),
-              const SizedBox(height: AppSpacing.s8),
+                      .copyWith(color: colorScheme.onSurfaceVariant, height: 1.55)),
+              const SizedBox(height: AppSpacing.s6),
+              Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.5), height: 1),
+              const SizedBox(height: AppSpacing.s4),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
+                child: FilledButton.tonal(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Close'),
                 ),

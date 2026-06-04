@@ -64,10 +64,9 @@ const catalog = {
   surveys:  staticData.surveys  || [],
   quests:   [
     { id: 'start_ride',     title: 'Start Ride Mode',       description: 'Begin a metro commute session',        points: 30, type: 'ride_started',          active: true },
-    { id: 'play_game',      title: 'Play a game',           description: 'Complete any game during your ride',   points: 20, type: 'game_completed',         active: true },
+    { id: 'watch_video',    title: 'Watch a video',         description: 'Watch a short video to earn points',   points: 15, type: 'video_watched',          active: true },
     { id: 'read_article',   title: 'Read an article',       description: 'Read any article in Learn',            points: 15, type: 'article_read',           active: true },
     { id: 'station_quiz',   title: 'Answer a station quiz', description: 'Test your metro knowledge',            points: 25, type: 'station_quiz_completed', active: true },
-    { id: 'check_passport', title: 'Check your passport',   description: 'View your station passport progress',  points: 10, type: 'passport_viewed',        active: true },
   ],
   videos:   staticData.videos   || [],
 };
@@ -670,6 +669,20 @@ function getHomePayload(userState) {
 function sanitizeCityId(value) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
   return normalized || 'hyd';
+}
+
+// IST calendar-day key (YYYY-MM-DD). Used for streak day-boundary logic so a
+// streak advances per calendar day, not per rolling 24h window.
+function istDayString(date = new Date()) {
+  const ist = new Date(date.getTime() + 330 * 60 * 1000);
+  return ist.toISOString().slice(0, 10);
+}
+
+// Whole-day difference between two IST day strings (b - a).
+function istDayDiff(aStr, bStr) {
+  const a = Date.parse(`${aStr}T00:00:00Z`);
+  const b = Date.parse(`${bStr}T00:00:00Z`);
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
 }
 
 function getIstWeekId(date = new Date()) {
@@ -1568,19 +1581,9 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
       const basePoints = Math.min(50, Math.max(15, Math.floor(Number(req.body.score) / 2)));
       const pointsEarned = Math.round(basePoints * commute.multiplier);
 
-      // Auto-complete the 'play_game' daily quest in the SAME transaction so
-      // the client doesn't need a separate /quests/.../complete round-trip.
-      const completed = new Set(state.completedQuests || []);
-      let questPointsEarned = 0;
-      if (!completed.has('play_game') && QUEST_POINTS['play_game']) {
-        completed.add('play_game');
-        questPointsEarned = QUEST_POINTS['play_game'];
-      }
-
       const next = {
         ...state,
-        points: state.points + pointsEarned + questPointsEarned,
-        completedQuests: [...completed],
+        points: state.points + pointsEarned,
         gameScores: { ...gameScores, [req.params.gameId]: { score: newScore, completions: current.completions + 1 } },
         ...(isDailySpin ? { lastDailySpinAt: now.toISOString() } : {}),
       };
@@ -1588,13 +1591,10 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
         next,
         response: {
           pointsEarned,
-          questCompleted: questPointsEarned > 0,
-          questPointsEarned,
           totalPoints: next.points,
           commuteMultiplier: commute.multiplier,
           commuteSessionId: commute.session?.id || null,
           gameScore: next.gameScores[req.params.gameId],
-          completedQuests: next.completedQuests,
         },
       };
     });
@@ -1635,12 +1635,15 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
       const lastClaim = state.lastStreakClaimAt ? new Date(state.lastStreakClaimAt) : null;
-      const msSince = lastClaim ? (now - lastClaim) : Infinity;
-      if (msSince < 24 * 60 * 60 * 1000) {
-        const err = new Error('Streak can only be claimed once per 24 hours'); err.statusCode = 400; throw err;
+      const todayIst = istDayString(now);
+      const lastIst = lastClaim ? istDayString(lastClaim) : null;
+
+      // Calendar-day semantics: one claim per IST day.
+      if (lastIst === todayIst) {
+        const err = new Error('Streak already counted today'); err.statusCode = 400; throw err;
       }
-      // Reset the streak if a full day was missed (>48h since last claim).
-      const continuing = msSince <= 48 * 60 * 60 * 1000;
+      // Continue if yesterday; otherwise the streak was broken → restart at 1.
+      const continuing = lastIst != null && istDayDiff(lastIst, todayIst) === 1;
       const newDay = continuing ? (state.streakDay || 0) + 1 : 1;
       const newLongest = Math.max(state.longestStreak || 0, newDay);
       const pointsEarned = 5 * newDay;
@@ -2113,16 +2116,25 @@ app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
         };
       }
 
+      // Complete the 'watch_video' daily quest (once/day) alongside the reward.
+      const completed = new Set(state.completedQuests || []);
+      let questPointsEarned = 0;
+      if (!completed.has('watch_video') && QUEST_POINTS['watch_video']) {
+        completed.add('watch_video');
+        questPointsEarned = QUEST_POINTS['watch_video'];
+      }
+
       const next = {
         ...state,
-        points: state.points + AD_REWARD_POINTS,
+        points: state.points + AD_REWARD_POINTS + questPointsEarned,
         adWatchDate: today,
         adWatchesToday: watchesToday + 1,
+        completedQuests: [...completed],
       };
       return {
         next,
         response: {
-          pointsAwarded: AD_REWARD_POINTS,
+          pointsAwarded: AD_REWARD_POINTS + questPointsEarned,
           watchesToday: watchesToday + 1,
           dailyLimit: AD_REWARD_DAILY_LIMIT,
           totalPoints: next.points,
@@ -2853,7 +2865,7 @@ const catalogQuestSchema = z.object({
   type:        z.enum([
     'game_completed','quest_completed','article_read','survey_submitted',
     'story_completed','ride_started','ride_completed','stamp_claimed',
-    'station_quiz_completed','passport_viewed',
+    'station_quiz_completed','passport_viewed','video_watched',
   ]),
   active:      z.boolean().optional().default(true),
   sortOrder:   z.number().int().min(0).optional().default(0),

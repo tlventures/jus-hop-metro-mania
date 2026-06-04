@@ -202,41 +202,44 @@ class _ScoreHero extends StatelessWidget {
                 color: AppColors.neonLime.withValues(alpha: 0.20),
               ),
             ),
-            Positioned(
-              right: 22,
-              top: 22,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.s3,
-                  vertical: AppSpacing.s2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: AppRadius.borderRadiusFull,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Text(
-                  'Game score',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.s4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Play streak power',
-                    style: AppTypography.labelLarge.copyWith(
-                      color: Colors.white.withValues(alpha: 0.78),
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Play streak power',
+                          style: AppTypography.labelLarge.copyWith(
+                            color: Colors.white.withValues(alpha: 0.78),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.s2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s3,
+                          vertical: AppSpacing.s2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: AppRadius.borderRadiusFull,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Text(
+                          'Game score',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
                   Text(

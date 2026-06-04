@@ -16,9 +16,11 @@ class Streak {
   });
 
   bool get canClaim {
+    // Calendar-day based: claimable once per day. The backend is authoritative
+    // (it enforces one claim per IST day); this just gates the auto-claim.
     final now = DateTime.now();
-    final lastClaim = lastClaimedAt;
-    return now.difference(lastClaim).inHours >= 24;
+    final last = lastClaimedAt;
+    return !(last.year == now.year && last.month == now.month && last.day == now.day);
   }
 
   int get pointsForClaim => currentDay * 5; // 5 pts × day number

@@ -208,6 +208,13 @@ Implemented the full UI priority matrix from the UX review:
   - `redemptions(userId ASC, createdAt DESC)` — My Redemptions query
   - `redemptions(status ASC, createdAt DESC)` — admin redemptions list
 
+### ✅ Completed 4 June 2026 — UX polish round (v1.0.19+20)
+- [x] **Streak now calendar-day (IST), not 24h windows.** Bug: "active whole day still says 1d". `/api/streak/claim` rewritten — rejects when `lastIst === todayIst` ("already counted today"), `continuing = istDayDiff(lastIst, todayIst) === 1`, `newDay = continuing ? day+1 : 1`. Added `istDayString`/`istDayDiff` helpers. Client `Streak.canClaim` mirrors this (claimable once per calendar day). Verified on-device: shows **2-day streak** with two filled days + "+15 back tomorrow".
+- [x] **Daily Quests reworked.** Removed `play_game` + `check_passport`; added `watch_video` (type `video_watched`, 15 pts). New default set: `start_ride, watch_video, read_article, station_quiz`. Removed the play_game auto-completion block from `/api/games/:gameId/complete`; wired `/api/rewards/watch-ad` to also complete `watch_video` once/day. Added `'video_watched'` to `catalogQuestSchema` enum. Reseeded `catalog_quests` via REST. Verified on-device: **0/4**.
+- [x] **Play hub `_ScoreHero` overlap fixed.** The "Game score" pill was absolutely positioned and overlapped the "Play streak power" title/trophy. Moved it into a Row with the title (`Expanded(title)` + pill); trophy now a non-overlapping watermark. Verified aligned on-device.
+- [x] **Notification detail sheet redesigned** — circular brand icon + "MetroSafar" source label + full timestamp, bold headline title, readable body (height 1.55), divider, and a lighter `FilledButton.tonal` "Close" (was a heavy primary button).
+- Backend redeployed to `metrosafar-20260517-223707`; app bumped to **v1.0.19+20**, built + installed on RZ8N91JKS9R.
+
 ### Still pending
 - [ ] **Provision Memorystore (Redis)** + VPC connector to activate the rate-limit store, user cache, and socket.io adapter (all degrade gracefully without it).
 - [ ] **Close the redemption loop fully:** confirm FCM token storage + the My Redemptions push end-to-end.
