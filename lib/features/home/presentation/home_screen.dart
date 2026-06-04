@@ -228,12 +228,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  if (flags.stamps ||
-                      flags.audioStories ||
-                      flags.liveEvents) ...[
-                    _Phase56Shelf(flags: flags),
-                    const SizedBox(height: AppSpacing.s5),
-                  ],
+                  // Always shown: the shelf now carries the "Book Tickets"
+                  // entry point in addition to any flag-gated companion cards.
+                  _Phase56Shelf(flags: flags),
+                  const SizedBox(height: AppSpacing.s5),
 
                   if (co2Kg > 0) _EcoImpactCard(co2Kg: co2Kg),
                 ],
@@ -1045,6 +1043,11 @@ class _Phase56Shelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = <Widget>[
+      _MiniPhaseCard(
+        icon: Icons.train_outlined,
+        label: 'Book Tickets',
+        onTap: () => context.push('/booking'),
+      ),
       if (flags.stamps)
         _MiniPhaseCard(
           icon: Icons.confirmation_number_outlined,

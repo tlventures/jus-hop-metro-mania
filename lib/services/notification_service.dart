@@ -103,8 +103,33 @@ class NotificationService {
   /// Conventions: { screen: 'my_redemptions' } or { screen: 'game', gameId: 'trivia' }.
   String routeFromData(Map<String, dynamic> data) {
     final screen = data['screen']?.toString();
-    if (screen == 'my_redemptions') return '/my-redemptions';
+    // Game deep-link needs the gameId param.
     if (screen == 'game' && data['gameId'] != null) return '/game/${data['gameId']}';
+    // Map any known screen token to its route. Keeps the payload contract
+    // simple (snake_case tokens) while covering every reachable destination.
+    const screenRoutes = <String, String>{
+      'my_redemptions': '/my-redemptions',
+      'notifications': '/notifications-inbox',
+      'notifications_inbox': '/notifications-inbox',
+      'settings': '/settings',
+      'home': '/home',
+      'ride': '/ride',
+      'play': '/play',
+      'wallet': '/wallet',
+      'profile': '/profile',
+      'learn': '/learn',
+      'stamps': '/stamps',
+      'audio': '/audio',
+      'events': '/events',
+      'journey_planner': '/journey-planner',
+      'friends': '/friends',
+      'referral': '/referral',
+      'booking': '/booking',
+    };
+    if (screen != null && screenRoutes.containsKey(screen)) {
+      return screenRoutes[screen]!;
+    }
+    // Explicit raw deeplink wins as a last resort.
     if (data['deeplink'] != null) return data['deeplink'].toString();
     return '/home';
   }
