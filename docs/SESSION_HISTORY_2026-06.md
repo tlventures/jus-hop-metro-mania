@@ -215,6 +215,13 @@ Implemented the full UI priority matrix from the UX review:
 - [x] **Notification detail sheet redesigned** — circular brand icon + "MetroSafar" source label + full timestamp, bold headline title, readable body (height 1.55), divider, and a lighter `FilledButton.tonal` "Close" (was a heavy primary button).
 - Backend redeployed to `metrosafar-20260517-223707`; app bumped to **v1.0.19+20**, built + installed on RZ8N91JKS9R.
 
+### ✅ Completed 5 June 2026 — Phase 1/2 verification + deploy hotfix
+- [x] **Verified referral trip-lock end-to-end (live).** Signed up two throwaway Firebase users via Auth REST `signUp`, applied a referral code, completed a game (referrer stayed at **0 pts** — no release ✅), then completed a trip (`ride_completed` → referrer **+150**, status `rewarded` ✅).
+- [x] **Verified leaderboard count() aggregation (live).** Three players with distinct scores in an isolated city returned ranks **1/2/3** and `playerCount=3`. Confirmed all rank paths are count-based: `getTriviaRank` (count()), `getUserRank` in `lib/leaderboard.js` (Redis→count()→materialized), and the only bounded scan is the background materializer.
+- [x] **⚠️ HOTFIX: restored backend env vars.** The QR-secret deploy used `gcloud run deploy --set-env-vars` which **replaces** (not merges) the entire env set — it wiped `FIREBASE_PROJECT_ID`, `ALLOWED_ORIGINS`, `METROSAFAR_WS_SECRET`, `METROSAFAR_FEATURE_FLAGS`, `LOG_LEVEL`, `ADMIN_ORIGINS`. With `FIREBASE_PROJECT_ID` gone, the Admin SDK fell back to the host project and **rejected all `metrosafar-5bcff` user tokens (401)** — authenticated app calls were failing for the window between revisions `00015-rtp` and the fix. Recovered original values from revision `00014-2f2`, redeployed via `--env-vars-file` (full set + QR vars) → revision **`00016-dtn`**, auth restored.
+  - **Lesson:** for env changes always use `gcloud run services update --update-env-vars` (merge) or `--env-vars-file` (explicit full set), **never** `--set-env-vars` on an existing service.
+- [x] **Cleaned test pollution** — the E2E referee's trivia score (score 100) had landed on the real `hyd` board (default cityId). Deleted it + the two test user docs + referral doc + code via Firestore REST; verified 404. (Synthetic `verify_lb_*`/`vlb2_*` boards left as-is — no real user queries them.)
+
 ### Still pending
 - [ ] **Provision Memorystore (Redis)** + VPC connector to activate the rate-limit store, user cache, and socket.io adapter (all degrade gracefully without it).
 - [ ] **Close the redemption loop fully:** confirm FCM token storage + the My Redemptions push end-to-end.
