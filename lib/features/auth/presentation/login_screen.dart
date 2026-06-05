@@ -61,7 +61,9 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await _authService.signIn(email, password);
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      // Returning users skip interests — go straight home.
+      context.go('/home');
     } on Exception catch (e) {
       if (mounted) setState(() => _errorMessage = _friendlyError(e.toString()));
     } finally {
@@ -91,7 +93,9 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await _authService.register(name, email, password);
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      // New user — send to the interests flow before home.
+      context.go('/interests');
     } on Exception catch (e) {
       if (mounted) setState(() => _errorMessage = _friendlyError(e.toString()));
     } finally {

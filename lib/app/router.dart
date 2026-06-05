@@ -28,6 +28,7 @@ import '../features/referral/presentation/referral_screen.dart';
 import '../features/social/presentation/friends_screen.dart';
 import '../features/stamps/presentation/stamps_screen.dart';
 import '../features/trip/presentation/trip_mode_screen.dart';
+import '../features/onboarding/presentation/screens/interests_screen.dart';
 
 Future<void> initializeRouter() async {
   await SharedPreferences.getInstance();
@@ -54,7 +55,9 @@ Future<String?> _redirect(BuildContext context, GoRouterState state) async {
   // Onboarded but not signed in → force to login (allow /login itself)
   final user = FirebaseAuth.instance.currentUser;
   if (doneOnboarding && user == null && path != '/login') return '/login';
+  // Signed-in users on /login → home; allow /interests for new sign-ups.
   if (doneOnboarding && user != null && path == '/login') return '/home';
+  if (doneOnboarding && user == null && path == '/interests') return '/login';
 
   return null;
 }
@@ -90,6 +93,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const OnboardingScreen(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/interests',
+      builder: (context, state) => const InterestsScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) {
         final selectedIndex = _getSelectedIndex(state.fullPath ?? '/home');
