@@ -281,6 +281,7 @@ class _StationPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final safeValue = stations.any((s) => s.id == value) ? value : null;
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       initialValue: safeValue,
       decoration: InputDecoration(
         labelText: label,
