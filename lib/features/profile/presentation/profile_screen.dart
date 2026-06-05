@@ -175,7 +175,7 @@ class _UserHero extends StatelessWidget {
             child: Center(
               child: Text(
                 UserDisplayName.initial(name),
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white),
+                style: AppTypography.displayMedium.copyWith(color: Colors.white),
               ),
             ),
           ),

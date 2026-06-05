@@ -417,9 +417,8 @@ class SpinWheelPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: segment.label,
-          style: const TextStyle(
+          style: AppTypography.labelLarge.copyWith(
             color: Colors.white,
-            fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
         ),

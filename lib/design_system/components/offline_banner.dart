@@ -1,6 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../tokens/typography.dart';
 
 final connectivityProvider = StreamProvider<bool>((ref) {
   return Connectivity().onConnectivityChanged.map(
@@ -21,14 +22,14 @@ class OfflineBanner extends ConsumerWidget {
       width: double.infinity,
       color: Colors.red.shade700,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.wifi_off, color: Colors.white, size: 16),
-          SizedBox(width: 8),
+          const Icon(Icons.wifi_off, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
           Text(
             'No internet connection',
-            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            style: AppTypography.labelLarge.copyWith(color: Colors.white),
           ),
         ],
       ),
@@ -55,7 +56,7 @@ class RetryWidget extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message ?? 'Could not load data',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
+              style: AppTypography.bodyMedium.copyWith(color: colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

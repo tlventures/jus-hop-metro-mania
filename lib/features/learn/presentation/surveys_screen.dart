@@ -201,13 +201,9 @@ class _SurveyCard extends StatelessWidget {
                         color: Colors.green,
                         shape: BoxShape.circle,
                       ),
-                      child: const Text(
+                      child: Text(
                         '✓',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                        style: AppTypography.labelMedium.copyWith(color: Colors.white),
                       ),
                     ),
                 ],

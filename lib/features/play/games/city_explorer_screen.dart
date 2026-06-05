@@ -383,12 +383,9 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
                                   color: colorScheme.primary,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '✓',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: AppTypography.labelLarge.copyWith(color: Colors.white),
                                 ),
                               ),
                             ),
