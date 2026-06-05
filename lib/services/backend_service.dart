@@ -124,6 +124,14 @@ class BackendService {
     return _getMap('/api/profile', cacheKey: 'cache_profile');
   }
 
+  /// Claims the one-time 500-point early-rider welcome bonus for new sign-ups.
+  /// Returns `{ success, alreadyClaimed, points }`.
+  /// Safe to call even when the offer is closed — the backend returns
+  /// `{ success: false, reason: 'offer_closed' }` gracefully.
+  Future<Map<String, dynamic>> claimEarlyRiderBonus() {
+    return _sendJson('POST', '/api/auth/early-rider-bonus', body: {});
+  }
+
   Future<Map<String, dynamic>> updateProfile({
     required String name,
     required String email,

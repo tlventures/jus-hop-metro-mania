@@ -4,6 +4,7 @@ import 'package:metrosafar/design_system/components/brand_logo.dart';
 import 'package:metrosafar/design_system/tokens/spacing.dart';
 import 'package:metrosafar/design_system/tokens/typography.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/backend_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -94,8 +95,21 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       await _authService.register(name, email, password);
       if (!mounted) return;
+
+      // Try to claim the early-rider bonus (fire-and-forget style — we pass
+      // the result to the interests screen so it can show the celebration, but
+      // a failure here must never block the user from proceeding).
+      int bonusPoints = 0;
+      try {
+        final bonus = await BackendService().claimEarlyRiderBonus();
+        if (bonus['success'] == true && bonus['alreadyClaimed'] != true) {
+          bonusPoints = (bonus['points'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) { /* bonus unavailable — continue silently */ }
+
+      if (!mounted) return;
       // New user — send to the interests flow before home.
-      context.go('/interests');
+      context.go('/interests', extra: bonusPoints > 0 ? bonusPoints : null);
     } on Exception catch (e) {
       if (mounted) setState(() => _errorMessage = _friendlyError(e.toString()));
     } finally {

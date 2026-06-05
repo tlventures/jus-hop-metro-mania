@@ -17,7 +17,10 @@ import '../../domain/user_preferences.dart';
 ///   2 — What topics excite you?           (ContentTopic, multi-select)
 ///   3 — All set! (summary + CTA)
 class InterestsScreen extends ConsumerStatefulWidget {
-  const InterestsScreen({super.key});
+  /// Points awarded by the early-rider bonus (null = offer not active / already claimed).
+  final int? earlyRiderBonus;
+
+  const InterestsScreen({super.key, this.earlyRiderBonus});
 
   @override
   ConsumerState<InterestsScreen> createState() => _InterestsScreenState();
@@ -183,7 +186,10 @@ class _InterestsScreenState extends ConsumerState<InterestsScreen> {
                         .toggleTopic(key),
                   ),
                   // Page 3 – summary
-                  _SummaryPage(prefs: prefs),
+                  _SummaryPage(
+                    prefs: prefs,
+                    earlyRiderBonus: widget.earlyRiderBonus,
+                  ),
                 ],
               ),
             ),
@@ -444,7 +450,8 @@ class _OptionCard extends StatelessWidget {
 
 class _SummaryPage extends StatelessWidget {
   final UserPreferences prefs;
-  const _SummaryPage({required this.prefs});
+  final int? earlyRiderBonus;
+  const _SummaryPage({required this.prefs, this.earlyRiderBonus});
 
   @override
   Widget build(BuildContext context) {
@@ -470,6 +477,47 @@ class _SummaryPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Early-rider bonus banner (shown only when bonus was awarded)
+          if (earlyRiderBonus != null && earlyRiderBonus! > 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.s5),
+              decoration: BoxDecoration(
+                color: AppColors.goldPoints.withValues(alpha: 0.15),
+                borderRadius: AppRadius.borderRadiusXL,
+                border: Border.all(
+                    color: AppColors.goldPoints.withValues(alpha: 0.5),
+                    width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Text('🎁', style: TextStyle(fontSize: 32)),
+                  const SizedBox(width: AppSpacing.s4),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Early rider bonus!',
+                          style: AppTypography.titleMedium.copyWith(
+                              color: AppColors.goldPoints,
+                              fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '+$earlyRiderBonus points credited to your wallet — '
+                          'thanks for joining Hyderabad\'s waitlist! 🚇',
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.goldPoints),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s4),
+          ],
+
           // Celebration header
           Container(
             width: double.infinity,

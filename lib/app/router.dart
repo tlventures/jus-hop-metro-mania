@@ -95,7 +95,9 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(
       path: '/interests',
-      builder: (context, state) => const InterestsScreen(),
+      builder: (context, state) => InterestsScreen(
+        earlyRiderBonus: state.extra as int?,
+      ),
     ),
     ShellRoute(
       builder: (context, state, child) {
