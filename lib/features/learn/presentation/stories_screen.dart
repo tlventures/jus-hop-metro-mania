@@ -208,12 +208,9 @@ class _StoryCard extends StatelessWidget {
                   color: Colors.green,
                   shape: BoxShape.circle,
                 ),
-                child: const Text(
+                child: Text(
                   '✓',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppTypography.labelLarge.copyWith(color: Colors.white),
                 ),
               ),
           ],

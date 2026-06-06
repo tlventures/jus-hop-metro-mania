@@ -2348,6 +2348,68 @@ app.post('/api/waitlist', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// Early-rider welcome bonus
+// ---------------------------------------------------------------------------
+//
+// POST /api/auth/early-rider-bonus
+//
+// Awards 500 points exactly once per user during the pre-launch period.
+// Controlled by a Firestore feature flag: feature_flags/early_rider_bonus
+//   { enabled: true, points: 500 }
+// Set enabled:false from the admin panel when you close the offer.
+//
+// Idempotent: second call returns { alreadyClaimed: true } with no side-effects.
+
+const EARLY_RIDER_BONUS_DEFAULT = 500;
+
+app.post('/api/auth/early-rider-bonus', accountLimiter, async (req, res, next) => {
+  try {
+    // 1. Check feature flag
+    const flagSnap = await firestore.collection('feature_flags').doc('early_rider_bonus').get();
+    const flag = flagSnap.data() || {};
+    if (!flag.enabled) {
+      return res.json({ success: false, reason: 'offer_closed' });
+    }
+    const bonusPoints = Number(flag.points) || EARLY_RIDER_BONUS_DEFAULT;
+
+    // 2. Idempotency — only award once
+    const state = await getUserState(req.clientId);
+    if (state.earlyRiderBonusClaimed) {
+      return res.json({ success: true, alreadyClaimed: true, points: 0 });
+    }
+
+    // 3. Credit points + wallet transaction
+    const walletTransactions = await addWalletTransaction(
+      req.clientId,
+      state,
+      'early_rider_bonus',
+      bonusPoints,
+      '🎉 Early rider welcome bonus — thanks for joining Hyderabad\'s waitlist!',
+    );
+
+    const next = {
+      ...state,
+      points: state.points + bonusPoints,
+      earlyRiderBonusClaimed: true,
+      walletTransactions,
+    };
+    await saveUserState(req.clientId, next);
+
+    // 4. Log activity event
+    await firestore.collection('metrosafar_users').doc(req.clientId)
+      .collection('activity_events').add({
+        type: 'early_rider_bonus',
+        pointsAwarded: bonusPoints,
+        createdAt: new Date().toISOString(),
+      });
+
+    res.json({ success: true, alreadyClaimed: false, points: bonusPoints });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Retention: score-to-beat trivia
 // ---------------------------------------------------------------------------
 

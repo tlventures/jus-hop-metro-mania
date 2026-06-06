@@ -25,6 +25,7 @@ import 'services/backend_service.dart';
 import 'services/connectivity_watcher.dart';
 import 'services/localization_service.dart';
 import 'services/notification_service.dart';
+import 'design_system/tokens/typography.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,23 +124,21 @@ class _ProductionErrorFallback extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.error_outline, size: 36, color: Color(0xFF4F46E5)),
-              SizedBox(height: 12),
+            children: [
+              const Icon(Icons.error_outline, size: 36, color: Color(0xFF4F46E5)),
+              const SizedBox(height: 12),
               Text(
                 'Something went wrong',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                style: AppTypography.headlineSmall.copyWith(
                   color: Color(0xFF252334),
                 ),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Text(
                 'Please reopen MetroSafar. We have logged this safely.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Color(0xFF5B5868)),
+                style: AppTypography.bodyMedium.copyWith(color: Color(0xFF5B5868)),
               ),
             ],
           ),
