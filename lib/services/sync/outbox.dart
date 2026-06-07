@@ -23,6 +23,19 @@ class PendingMutation {
     this.lastError,
   });
 
+  /// A mutation is "dead" (should be dropped, never retried again) once it has
+  /// failed too many times or has been sitting in the queue past its TTL.
+  /// This stops a permanently-failing request (deleted endpoint, expired auth,
+  /// server-side validation error) from being retried forever and bloating the
+  /// stored outbox on every connectivity event.
+  bool isDead({
+    int maxRetries = Outbox.maxRetries,
+    Duration ttl = Outbox.ttl,
+  }) {
+    if (retryCount >= maxRetries) return true;
+    return DateTime.now().difference(createdAt) > ttl;
+  }
+
   PendingMutation copyWith({int? retryCount, String? lastError}) {
     return PendingMutation(
       id: id,
@@ -71,6 +84,23 @@ class PendingMutation {
 class Outbox {
   static const String _storageKey = 'phase56_outbox';
   static const int _maxEntries = 1000;
+
+  /// Drop a queued mutation after this many failed flush attempts.
+  static const int maxRetries = 5;
+
+  /// Drop a queued mutation if it has not synced within this window, regardless
+  /// of retry count (e.g. a device that was offline for days).
+  static const Duration ttl = Duration(hours: 72);
+
+  /// Purge dead (max-retries-exceeded or expired) mutations from storage.
+  /// Returns the entries that were dropped so callers can log/telemeter them.
+  Future<List<PendingMutation>> purgeDead() async {
+    final current = await all();
+    final dead = current.where((m) => m.isDead()).toList();
+    if (dead.isEmpty) return const [];
+    await replaceAll(current.where((m) => !m.isDead()).toList());
+    return dead;
+  }
 
   Future<List<PendingMutation>> all() async {
     final prefs = await SharedPreferences.getInstance();

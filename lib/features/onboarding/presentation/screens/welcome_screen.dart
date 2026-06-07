@@ -43,9 +43,11 @@ class WelcomeScreen extends StatelessWidget {
 
               return SingleChildScrollView(
                 child: ConstrainedBox(
+                  // minHeight lets short content centre and fill the viewport;
+                  // taller content simply scrolls. No IntrinsicHeight/Spacer —
+                  // those overflow when the headline text wraps on small screens.
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Center(
+                  child: Center(
                       child: ConstrainedBox(
                         // Cap content width on tablets / foldables / notepads.
                         constraints: const BoxConstraints(maxWidth: 560),
@@ -80,9 +82,6 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              // Flexible top spacer distributes empty space on
-                              // tall screens instead of clustering at the top.
-                              const Spacer(flex: 2),
                               const SizedBox(height: AppSpacing.s8),
                               const _SignalPill(
                                 icon: Icons.bolt_outlined,
@@ -146,7 +145,6 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              const Spacer(flex: 3),
                               const SizedBox(height: AppSpacing.s8),
                               FilledButton.icon(
                                 onPressed: onNext,
@@ -178,8 +176,7 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
-              );
+                );
             },
           ),
         ),

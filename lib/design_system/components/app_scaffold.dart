@@ -47,6 +47,7 @@ class AppScaffold extends StatelessWidget {
             (Navigator.of(context).canPop()
                 ? IconButton(
                     icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+                    tooltip: 'Back',
                     onPressed: onBackPressed ?? () => Navigator.pop(context),
                   )
                 : null),

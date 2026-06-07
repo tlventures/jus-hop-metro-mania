@@ -98,9 +98,6 @@ dependencies:
   # Charts
   fl_chart: ^0.65.0
 
-  # Markdown rendering for articles
-  provider: ^6.1.5+1
-
   # WebSocket / realtime
   socket_io_client: ^2.0.3+1
 

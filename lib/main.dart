@@ -149,9 +149,67 @@ class _ProductionErrorFallback extends StatelessWidget {
   }
 }
 
+/// Runs in a separate background isolate when a push arrives while the app is
+/// backgrounded or terminated.
+///
+/// For *notification* messages FCM renders the system tray entry itself, and a
+/// tap is routed by [NotificationService] via onMessageOpenedApp /
+/// getInitialMessage on next resume — so we only need Firebase initialised here.
+///
+/// For *data-only* messages the OS shows nothing, so we surface a local
+/// notification carrying the deep-link route as its payload; tapping it then
+/// routes through the same NotificationService handler. Without this, data-only
+/// pushes were silently dropped.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Notification messages are handled by the OS / tap handlers; nothing to do.
+  if (message.notification != null) return;
+  if (message.data.isEmpty) return;
+
+  try {
+    final plugin = FlutterLocalNotificationsPlugin();
+    await plugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+    );
+    const channel = AndroidNotificationChannel(
+      'metrosafar_general',
+      'MetroSafar updates',
+      description: 'Trip, reward, and metro service updates.',
+      importance: Importance.defaultImportance,
+    );
+    await plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    final data = message.data;
+    final route = NotificationService.instance.routeFromData(
+      Map<String, dynamic>.from(data),
+    );
+    await plugin.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      data['title']?.toString() ?? 'MetroSafar',
+      data['body']?.toString() ?? 'You have a new update.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'metrosafar_general',
+          'MetroSafar updates',
+          channelDescription: 'Trip, reward, and metro service updates.',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      payload: route,
+    );
+  } catch (e) {
+    debugPrint('Background FCM handler failed: $e');
+  }
 }
 
 void _wireAuthBoundServices() {

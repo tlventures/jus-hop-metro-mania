@@ -18,7 +18,9 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.tlventures.metrosafar"
-    compileSdk = flutter.compileSdkVersion
+    // Pin compileSdk to 35 (>= targetSdk). Explicit rather than
+    // flutter.compileSdkVersion so a toolchain bump can't shift it under us.
+    compileSdk = 35
 
     // Update NDK version to match what plugins require
     ndkVersion = "29.0.13113456"
@@ -47,8 +49,13 @@ android {
 
     defaultConfig {
         applicationId = "com.tlventures.metrosafar"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // Explicit SDK levels rather than the Flutter defaults so a toolchain
+        // bump can never silently regress us below Play Store requirements.
+        //   minSdk 23   — required by firebase_auth / google_mobile_ads 7.x.
+        //   targetSdk 35 — Play Store mandates target API 35 for new app
+        //     submissions and updates (effective Aug 2025).
+        minSdk = 23
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["adMobApplicationId"] =

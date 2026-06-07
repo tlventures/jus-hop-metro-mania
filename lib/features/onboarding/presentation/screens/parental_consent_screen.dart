@@ -84,7 +84,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (widget.onBack != null)
-            IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
+            IconButton(icon: const Icon(Icons.arrow_back), tooltip: 'Back', onPressed: widget.onBack),
           const SizedBox(height: AppSpacing.s4),
           Container(
             padding: const EdgeInsets.all(AppSpacing.s4),

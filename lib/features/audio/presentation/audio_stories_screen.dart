@@ -149,6 +149,7 @@ class _NowPlayingBar extends ConsumerWidget {
                           playing ? Icons.pause : Icons.play_arrow,
                           color: colorScheme.onPrimaryContainer,
                         ),
+                        tooltip: playing ? 'Pause' : 'Play',
                         onPressed: service.togglePlayPause,
                       ),
                       IconButton(
@@ -156,6 +157,7 @@ class _NowPlayingBar extends ConsumerWidget {
                           Icons.stop,
                           color: colorScheme.onPrimaryContainer,
                         ),
+                        tooltip: 'Stop',
                         onPressed: service.stop,
                       ),
                     ],

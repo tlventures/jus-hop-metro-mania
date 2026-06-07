@@ -52,7 +52,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           IconButton(
             onPressed: _load,
             icon: const Icon(Icons.refresh),
-            tooltip: '',
+            tooltip: 'Refresh',
           ),
         ],
       ),

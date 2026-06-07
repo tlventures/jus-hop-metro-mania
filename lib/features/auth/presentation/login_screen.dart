@@ -434,6 +434,7 @@ class _PasswordField extends StatelessWidget {
         suffixIcon: onToggle != null
             ? IconButton(
                 icon: Icon(visible ? Icons.visibility_off : Icons.visibility),
+                tooltip: visible ? 'Hide password' : 'Show password',
                 onPressed: onToggle,
               )
             : null,

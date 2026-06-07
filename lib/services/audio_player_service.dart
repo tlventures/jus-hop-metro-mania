@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'backend_service.dart';
+import 'telemetry.dart';
 
 // ---------------------------------------------------------------------------
 // AudioHandler — bridges just_audio to audio_service lock-screen controls
@@ -129,7 +130,9 @@ class AudioPlayerService {
       final pos = await _backend.getEpisodePosition(episodeId);
       startAt = (pos['positionSeconds'] as num?)?.toInt() ?? 0;
       if (startAt >= durationSecs - 5) startAt = 0; // episode effectively done
-    } catch (_) {}
+    } catch (e, st) {
+      Telemetry.recordNonFatal(e, st, reason: 'episode_position_fetch');
+    }
 
     final item = MediaItem(
       id: episodeId,

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/api_config.dart';
+import '../../services/telemetry.dart';
 import 'content_pack_models.dart';
 import 'current_city_provider.dart';
 
@@ -33,7 +34,10 @@ class ContentPackService {
     if (!forceRefresh && cacheJson != null && !stale) {
       try {
         return Map<String, dynamic>.from(jsonDecode(cacheJson) as Map);
-      } catch (_) {/* fall through */}
+      } catch (e, st) {
+        Telemetry.recordNonFatal(e, st, reason: 'content_pack_cache_parse');
+        /* fall through */
+      }
     }
 
     try {
@@ -53,7 +57,11 @@ class ContentPackService {
     } catch (e) {
       debugPrint('ContentPackService.fetchRaw error: $e');
       if (cacheJson != null) {
-        try { return Map<String, dynamic>.from(jsonDecode(cacheJson) as Map); } catch (_) {}
+        try {
+          return Map<String, dynamic>.from(jsonDecode(cacheJson) as Map);
+        } catch (e2, st2) {
+          Telemetry.recordNonFatal(e2, st2, reason: 'content_pack_stale_cache_parse');
+        }
       }
     }
     return null;

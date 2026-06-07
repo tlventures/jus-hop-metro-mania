@@ -10,8 +10,28 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/metro_station.dart';
 import '../utils/constants.dart';
+import 'telemetry.dart';
 
 class LocationService {
+  /// Whether the Google Maps Distance Matrix integration is both enabled AND
+  /// has a key. When enabled without a key we log once (so the misconfiguration
+  /// is visible instead of silently degrading) and fall back to local distance.
+  static bool _warnedMissingMapsKey = false;
+  static bool get _mapsApiUsable {
+    if (!Constants.useRealGoogleMapsApi) return false;
+    if (Constants.googleMapsApiKey.isEmpty) {
+      if (!_warnedMissingMapsKey) {
+        _warnedMissingMapsKey = true;
+        Telemetry.recordNonFatal(
+          StateError('METROSAFAR_MAPS_API_KEY missing'),
+          StackTrace.current,
+          reason: 'maps_api_enabled_without_key_falling_back_to_local',
+        );
+      }
+      return false;
+    }
+    return true;
+  }
   // ── Location permission / position ────────────────────────────────────────
 
   Future<Position> getCurrentLocation() async {
@@ -75,7 +95,7 @@ class LocationService {
   }) async {
     if (cityStations.isEmpty) return [];
 
-    if (useGoogleMaps && Constants.useRealGoogleMapsApi) {
+    if (useGoogleMaps && _mapsApiUsable) {
       return _getNearbyStationsViaGoogleMapsAPI(position, cityStations);
     }
     return _getNearbyStationsLocally(position, cityStations);
@@ -189,7 +209,7 @@ class LocationService {
     int maxFare = 60,
   }) async {
     try {
-      if (Constants.useRealGoogleMapsApi) {
+      if (_mapsApiUsable) {
         return await _calculateFareViaAPI(
           fromId,
           toId,
@@ -277,7 +297,7 @@ class LocationService {
     List<MetroStation> cityStations,
   ) async {
     try {
-      if (Constants.useRealGoogleMapsApi) {
+      if (_mapsApiUsable) {
         return await _getRouteViaAPI(fromId, toId, cityStations);
       }
       return _getRouteLocally(fromId, toId, cityStations);
