@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/api_config.dart';
 import '../../models/metro_station.dart';
+import '../../services/telemetry.dart';
 import 'city_model.dart';
 
 class CityRepository {
@@ -34,7 +35,10 @@ class CityRepository {
       try {
         final list = jsonDecode(cacheJson) as List;
         return list.map((j) => CitySummary.fromJson(Map<String, dynamic>.from(j as Map))).toList();
-      } catch (_) { /* fall through to network */ }
+      } catch (e, st) {
+        Telemetry.recordNonFatal(e, st, reason: 'city_summaries_cache_parse');
+        /* fall through to network */
+      }
     }
 
     try {
@@ -55,7 +59,9 @@ class CityRepository {
       try {
         final list = jsonDecode(cacheJson) as List;
         return list.map((j) => CitySummary.fromJson(Map<String, dynamic>.from(j as Map))).toList();
-      } catch (_) {}
+      } catch (e, st) {
+        Telemetry.recordNonFatal(e, st, reason: 'city_summaries_stale_cache_parse');
+      }
     }
     return [];
   }
@@ -91,7 +97,9 @@ class CityRepository {
     if (!forceRefresh && cacheJson != null && !stale) {
       try {
         return City.fromJson(Map<String, dynamic>.from(jsonDecode(cacheJson) as Map));
-      } catch (_) {}
+      } catch (e, st) {
+        Telemetry.recordNonFatal(e, st, reason: 'city_bundle_cache_parse');
+      }
     }
 
     try {
@@ -114,7 +122,9 @@ class CityRepository {
     if (cacheJson != null) {
       try {
         return City.fromJson(Map<String, dynamic>.from(jsonDecode(cacheJson) as Map));
-      } catch (_) {}
+      } catch (e, st) {
+        Telemetry.recordNonFatal(e, st, reason: 'city_bundle_stale_cache_parse');
+      }
     }
     return null;
   }

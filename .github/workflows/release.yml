@@ -1,0 +1,91 @@
+name: Release
+
+# Tag a commit `v1.0.x` to build a signed AAB and upload it to the Play Store
+# internal track. All secrets live in GitHub repo settings → Secrets.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  android-release:
+    name: Build & upload AAB (internal track)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.x'
+          channel: stable
+          cache: true
+
+      - name: Run tests (gate the release)
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      # Recreate the upload keystore + key.properties from base64-encoded secrets.
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build release AAB
+        env:
+          METROSAFAR_API_BASE_URL: ${{ secrets.METROSAFAR_API_BASE_URL }}
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.ADMOB_ANDROID_BANNER_UNIT_ID }}
+          ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          METROSAFAR_MAPS_API_KEY: ${{ secrets.METROSAFAR_MAPS_API_KEY }}
+        run: scripts/build_release.sh
+
+      - name: Upload to Play Store (internal)
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.tlventures.metrosafar
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
+
+  backend-deploy:
+    name: Deploy backend to Cloud Run
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Deploy from source. NEVER use --set-env-vars here: it REPLACES the whole
+      # env set and has previously wiped FIREBASE_PROJECT_ID/auth config. Use the
+      # Cloud Run console or --update-env-vars for env changes.
+      - name: Deploy
+        run: |
+          gcloud run deploy metrosafar-backend \
+            --source . \
+            --region asia-south1 \
+            --project metrosafar-20260517-223707 \
+            --quiet

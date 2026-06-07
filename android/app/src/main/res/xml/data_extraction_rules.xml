@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+) backup/transfer rules. We disallow cloud backup and
+  device-to-device transfer of the app's SharedPreferences and secure storage.
+
+  Rationale (DPDPA): the minor-status / date-of-birth classification and
+  onboarding/consent flags must never be restored from one user's backup onto
+  another device or profile — a restored "adult" flag onto a minor's device
+  would re-enable ads/analytics in violation of DPDPA §9. The safest posture
+  is to exclude app data from backup entirely; it is all re-derivable from the
+  server on next sign-in.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>

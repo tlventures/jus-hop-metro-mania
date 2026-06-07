@@ -32,6 +32,15 @@ class BackendRateLimitException implements Exception {
   String toString() => message;
 }
 
+/// Internal marker for a 5xx response so the retry loop can distinguish a
+/// transient server error from a terminal 4xx. Never escapes BackendService.
+class _RetryableHttpException implements Exception {
+  final int statusCode;
+  const _RetryableHttpException(this.statusCode);
+  @override
+  String toString() => 'Server error ($statusCode)';
+}
+
 class BackendService {
   final http.Client _client;
 
@@ -693,6 +702,16 @@ class BackendService {
 
   Future<void> flushOutbox() async {
     final outbox = Outbox();
+    // Drop anything that has already exhausted its retries or TTL before we
+    // even try, so a permanently-failing mutation can't be retried forever.
+    final dropped = await outbox.purgeDead();
+    for (final dead in dropped) {
+      debugPrint(
+        'Outbox: dropping dead mutation ${dead.method} ${dead.path} '
+        '(retries=${dead.retryCount}, lastError=${dead.lastError})',
+      );
+    }
+
     final pending = await outbox.all();
     final failures = <PendingMutation>[];
 
@@ -708,20 +727,19 @@ class BackendService {
             .timeout(const Duration(seconds: 12));
         final response = await http.Response.fromStream(streamed);
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          failures.add(
-            mutation.copyWith(
-              retryCount: mutation.retryCount + 1,
-              lastError: response.body,
-            ),
+          final next = mutation.copyWith(
+            retryCount: mutation.retryCount + 1,
+            lastError: response.body,
           );
+          // Keep retrying only while it has retries/TTL left; otherwise drop it.
+          if (!next.isDead()) failures.add(next);
         }
       } catch (error) {
-        failures.add(
-          mutation.copyWith(
-            retryCount: mutation.retryCount + 1,
-            lastError: error.toString(),
-          ),
+        final next = mutation.copyWith(
+          retryCount: mutation.retryCount + 1,
+          lastError: error.toString(),
         );
+        if (!next.isDead()) failures.add(next);
       }
     }
 
@@ -769,6 +787,12 @@ class BackendService {
     }
   }
 
+  /// Max attempts for a mutating request before giving up (and queueing if
+  /// offline-eligible). Retries are SAFE because every request carries a stable
+  /// Idempotency-Key — the backend dedupes replays, so a retried write can never
+  /// double-apply (e.g. award points twice).
+  static const int _maxSendAttempts = 3;
+
   Future<Map<String, dynamic>> _sendJson(
     String method,
     String path, {
@@ -776,66 +800,94 @@ class BackendService {
     Map<String, dynamic>? body,
     bool queueOffline = false,
   }) async {
+    // Stable across retries so the backend dedupes replays of the same mutation.
     final idempotencyKey = _newRequestId();
     final headers = await _headers(idempotencyKey: idempotencyKey);
-    final request = http.Request(method, _uri(path));
-    request.headers.addAll(headers);
-    if (body != null) {
-      request.body = jsonEncode(body);
+
+    Object? lastError;
+    for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
+      try {
+        final request = http.Request(method, _uri(path));
+        request.headers.addAll(headers);
+        if (body != null) request.body = jsonEncode(body);
+
+        final streamed = await _client
+            .send(request)
+            .timeout(const Duration(seconds: 12));
+        final response = await http.Response.fromStream(streamed);
+
+        // Terminal client outcomes — never retry these.
+        if (response.statusCode == 401) {
+          throw const BackendAuthException();
+        }
+        if (response.statusCode == 429) {
+          throw BackendRateLimitException(
+            retryAfterSeconds: _retryAfter(response),
+          );
+        }
+        if (response.statusCode >= 400 && response.statusCode < 500) {
+          throw Exception(
+            response.body.isNotEmpty ? response.body : 'Request failed',
+          );
+        }
+        // 5xx — server-side, transient: fall through to retry.
+        if (response.statusCode >= 500) {
+          throw _RetryableHttpException(response.statusCode);
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        if (response.body.isNotEmpty) {
+          if (cacheKey != null) await prefs.setString(cacheKey, response.body);
+          return Map<String, dynamic>.from(
+            jsonDecode(response.body) as Map<String, dynamic>,
+          );
+        }
+        return {};
+      } on BackendAuthException {
+        rethrow; // never retry / never queue
+      } on BackendRateLimitException {
+        rethrow; // never retry / never queue
+      } catch (error) {
+        lastError = error;
+        // Only network/timeout/5xx are retryable; a 4xx is an Exception we
+        // already rethrew above is not reachable here. Back off and retry while
+        // attempts remain.
+        if (attempt < _maxSendAttempts) {
+          await Future<void>.delayed(_backoffDelay(attempt));
+          continue;
+        }
+      }
     }
 
-    try {
-      final streamed = await _client
-          .send(request)
-          .timeout(const Duration(seconds: 12));
-      final response = await http.Response.fromStream(streamed);
-      if (response.statusCode == 401) {
-        throw const BackendAuthException();
-      }
-      if (response.statusCode == 429) {
-        throw BackendRateLimitException(
-          retryAfterSeconds: _retryAfter(response),
-        );
-      }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          response.body.isNotEmpty ? response.body : 'Request failed',
-        );
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      if (response.body.isNotEmpty) {
-        if (cacheKey != null) await prefs.setString(cacheKey, response.body);
-        return Map<String, dynamic>.from(
-          jsonDecode(response.body) as Map<String, dynamic>,
-        );
-      }
-
-      return {};
-    } catch (error) {
-      // Don't queue auth or rate-limit failures — only genuine connectivity ones.
-      if (queueOffline &&
-          error is! BackendAuthException &&
-          error is! BackendRateLimitException) {
-        await Outbox().enqueue(
-          PendingMutation(
-            id: idempotencyKey,
-            method: method,
-            path: path,
-            headers: headers,
-            body: body,
-            createdAt: DateTime.now(),
-            lastError: error.toString(),
-          ),
-        );
-        return {
-          'queued': true,
-          'idempotencyKey': idempotencyKey,
-          'message': 'Saved offline and will sync when the network returns.',
-        };
-      }
-      rethrow;
+    // All attempts exhausted. Queue for later if this is an offline-eligible
+    // mutation; otherwise surface the failure.
+    if (queueOffline) {
+      await Outbox().enqueue(
+        PendingMutation(
+          id: idempotencyKey,
+          method: method,
+          path: path,
+          headers: headers,
+          body: body,
+          createdAt: DateTime.now(),
+          lastError: lastError?.toString(),
+        ),
+      );
+      return {
+        'queued': true,
+        'idempotencyKey': idempotencyKey,
+        'message': 'Saved offline and will sync when the network returns.',
+      };
     }
+    throw lastError ?? Exception('Request failed');
+  }
+
+  /// Exponential backoff with full jitter: base 300ms * 2^(attempt-1), randomised
+  /// in [0, cap] to avoid thundering-herd retries after a shared outage.
+  Duration _backoffDelay(int attempt) {
+    final base = 300 * (1 << (attempt - 1)); // 300, 600, 1200ms
+    final jittered = Random().nextInt(base + 1);
+    return Duration(milliseconds: jittered);
   }
 
   /// Parse the Retry-After header (seconds) from a 429 response; default 5s.

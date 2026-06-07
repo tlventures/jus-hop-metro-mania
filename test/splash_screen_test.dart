@@ -12,6 +12,8 @@ void main() {
 
     expect(find.text('Ride. Earn. Own your city.'), findsOneWidget);
     expect(find.text('Start earning'), findsOneWidget);
-    expect(find.byIcon(Icons.train_outlined), findsWidgets);
+    // The rewards-first promise pill and the primary CTA arrow.
+    expect(find.byIcon(Icons.bolt_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
   });
 }

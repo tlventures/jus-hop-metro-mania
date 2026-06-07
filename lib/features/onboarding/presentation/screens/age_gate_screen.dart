@@ -99,6 +99,7 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
                 if (widget.onBack != null)
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back',
                     onPressed: widget.onBack,
                   ),
                 const SizedBox(height: AppSpacing.s4),

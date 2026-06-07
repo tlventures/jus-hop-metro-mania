@@ -23,6 +23,7 @@ const {
 } = require('./lib/leaderboard');
 const { generateStationToken, validateStationToken } = require('./lib/qr-tokens');
 const { verifyAdMobSSV } = require('./lib/admob-ssv');
+const { validateTriviaScore } = require('./lib/anti-cheat');
 const {
   installPhase56Middleware,
   installPhase56Routes,
@@ -39,6 +40,20 @@ admin.initializeApp({
 });
 
 const PORT = Number(process.env.PORT || 8080);
+
+// Client force-update config surfaced in GET /api/home → appConfig.
+// The Flutter VersionGate compares its build number against minSupportedBuild
+// and shows a blocking "Update required" dialog when below it. Env-driven so we
+// can raise the floor (retire a broken/breaking client) without a code deploy.
+//   MIN_SUPPORTED_BUILD — integer Android versionCode / iOS CFBundleVersion.
+//   APP_STORE_URL       — where the update button sends the user.
+const APP_CONFIG = {
+  minSupportedBuild: Number(process.env.MIN_SUPPORTED_BUILD || 24),
+  storeUrl:
+    process.env.APP_STORE_URL ||
+    'https://play.google.com/store/apps/details?id=com.tlventures.metrosafar',
+};
+
 const DB_PATH = path.join(__dirname, 'db.json');
 const STATIONS_PATH = path.join(__dirname, 'stations.json');
 const CONTENT_DIR = path.join(__dirname, 'content');
@@ -665,6 +680,7 @@ function getHomePayload(userState) {
     },
     games: catalog.games,
     featuredVideos: rewards.videos.slice(0, 2),
+    appConfig: APP_CONFIG,
   };
 }
 
@@ -831,7 +847,36 @@ async function getTriviaRank(cityId, clientId, limit = 10) {
 async function recordTriviaScore(clientId, payload) {
   const profile = await getUserState(clientId);
   const cityId = sanitizeCityId(payload.cityId || profile.activeCityId);
-  const score = Number(payload.score || 0);
+
+  // Anti-cheat: clamp the leaderboard score to what the reported gameplay can
+  // actually produce. Wallet points are capped elsewhere; this protects RANK.
+  const verdict = validateTriviaScore(payload);
+  const score = verdict.score;
+  if (!verdict.accepted) {
+    logger.warn(
+      { clientId, cityId, ...verdict },
+      'Trivia score clamped by anti-cheat',
+    );
+    // Append-only audit trail for review (fire-and-forget; never blocks scoring).
+    firestore
+      .collection('anti_cheat')
+      .add({
+        uid: clientId,
+        cityId,
+        game: 'trivia',
+        reason: verdict.reason,
+        reportedScore: verdict.reportedScore,
+        clampedTo: verdict.score,
+        maxPlausible: verdict.maxPlausible,
+        questionsAnswered: Number(payload.questionsAnswered || 0),
+        timeSpent: payload.timeSpent == null ? null : Number(payload.timeSpent),
+        at: new Date().toISOString(),
+      })
+      .catch((err) =>
+        logger.warn({ err }, 'anti_cheat audit write failed (non-fatal)'),
+      );
+  }
+
   const todayKey = new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
   const ref = firestore.collection('metrosafar_trivia_scores').doc(cityId).collection('scores').doc(clientId);
   const snap = await ref.get();

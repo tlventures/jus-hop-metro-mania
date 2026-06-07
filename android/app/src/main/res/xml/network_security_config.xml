@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network security policy for MetroSafar.
+
+  base-config: production default — cleartext (http://) traffic is BLOCKED app-wide
+  so points/rewards/auth traffic can only flow over TLS. The system trust store
+  is used (no user-added CAs) so a user-installed proxy CA cannot silently MITM
+  release traffic.
+
+  domain-config (localhost / 10.0.2.2): cleartext allowed ONLY for the local dev
+  backend used by the Android emulator and integration tests. These are private
+  addresses that never apply on a real device pointed at production.
+
+  Certificate pinning (production domain below): we pin the Google Trust
+  Services CA public keys that sign the Cloud Run leaf certificate rather than
+  the leaf itself — Cloud Run rotates leaf certs frequently, so a leaf pin would
+  brick the app. Two pins are configured for safety:
+    • GTS WE2 (intermediate, current signer)  → vh78KSg1Ry4NaqGDV10w/cTb9VH3BQUZoCWNa93W/EY=
+    • GTS Root R4 (backup, stable root)        → mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=
+  Capture/refresh with:
+    openssl s_client -connect <host>:443 -servername <host> -showcerts </dev/null \
+      | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der \
+      | openssl dgst -sha256 -binary | openssl enc -base64
+
+  expiration: after this date Android IGNORES the pin-set (traffic still goes
+  over TLS via the system trust store — fails OPEN, not closed) so an unattended
+  build can never be bricked by a CA migration. Refresh the pins and bump this
+  date well before it lapses.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Production backend (Cloud Run) — TLS + certificate pinning. -->
+    <domain-config>
+        <domain includeSubdomains="true">a.run.app</domain>
+        <pin-set expiration="2026-12-01">
+            <!-- GTS WE2 intermediate (current leaf signer) -->
+            <pin digest="SHA-256">vh78KSg1Ry4NaqGDV10w/cTb9VH3BQUZoCWNa93W/EY=</pin>
+            <!-- GTS Root R4 (backup pin) -->
+            <pin digest="SHA-256">mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Local development backend only (emulator + tests). -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+</network-security-config>

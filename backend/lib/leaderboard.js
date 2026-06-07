@@ -22,7 +22,7 @@
 
 'use strict';
 
-const { cacheGet, cacheSet } = require('./redis');
+const { cacheGet, cacheSet, getRedis } = require('./redis');
 
 const REFRESH_INTERVAL_MS = 30_000; // 30 seconds
 const MATERIALIZED_COL    = 'leaderboard_materialized';
@@ -30,6 +30,13 @@ const SCORES_COL          = 'metrosafar_trivia_scores';
 const TOP_N               = 50;
 const SCAN_LIMIT          = 500;   // still needed for materializer, but runs once per 30s not per request
 const RANK_CACHE_TTL      = 60;    // seconds
+// Per-tick leader lock: on each interval every Cloud Run instance races to set
+// this key with NX. Only the winner materializes that cycle, so N instances do
+// the work of one (no duplicated 500-doc scans / write contention). The lock
+// TTL is just under the interval so the next tick re-elects a (possibly
+// different) leader — no long-lived leadership, no failover gap.
+const LEADER_LOCK_KEY     = 'leaderboard:materializer:lock';
+const LEADER_LOCK_TTL_MS  = REFRESH_INTERVAL_MS - 5_000;
 
 let _firestore = null;
 let _logger    = null;
@@ -160,6 +167,8 @@ function startLeaderboardRefresher(firestore, logger) {
   _logger    = logger;
 
   _interval = setInterval(async () => {
+    // Only one instance per tick does the work (see LEADER_LOCK_KEY).
+    if (!(await _acquireTickLock())) return;
     for (const cityId of activeCities) {
       await refreshLeaderboard(cityId);
     }
@@ -169,6 +178,30 @@ function startLeaderboardRefresher(firestore, logger) {
   if (_interval.unref) _interval.unref();
 
   if (logger) logger.info({ intervalMs: REFRESH_INTERVAL_MS }, 'Leaderboard refresher started');
+}
+
+/**
+ * Try to become this tick's materialization leader.
+ * Returns true if this instance won the lock (or if Redis isn't configured —
+ * single-instance / local dev, where running unconditionally is correct).
+ */
+async function _acquireTickLock() {
+  const redis = getRedis();
+  if (!redis || redis.status !== 'ready') return true; // no Redis → run locally
+  try {
+    // SET key value NX PX ttl → returns 'OK' only if the key was unset.
+    const res = await redis.set(
+      LEADER_LOCK_KEY,
+      `${process.pid}:${Date.now()}`,
+      'PX',
+      LEADER_LOCK_TTL_MS,
+      'NX',
+    );
+    return res === 'OK';
+  } catch (err) {
+    if (_logger) _logger.warn({ err }, 'Leader lock acquire failed — skipping tick');
+    return false; // on Redis error, don't risk duplicated work this tick
+  }
 }
 
 module.exports = {

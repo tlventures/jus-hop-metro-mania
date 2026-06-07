@@ -10,6 +10,7 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../services/user_display_name.dart';
+import '../../../services/version_gate.dart';
 import '../../notifications/application/notifications_provider.dart';
 import '../application/streak_provider.dart';
 import '../application/quest_provider.dart';
@@ -63,6 +64,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    // Force-update gate: when the aggregate home payload arrives, check the
+    // server-driven minimum supported build and block the app if we're below
+    // it. Runs at most once per session (guarded inside VersionGate).
+    ref.listen(homeProvider, (prev, next) {
+      next.whenOrNull(
+        data: (home) => VersionGate.enforce(context, home.appConfig),
+      );
+    });
 
     // Wait for core data (streak, quests, wallet) to load before rendering.
     // This prevents the flicker of stale defaults while data is fetching.

@@ -99,7 +99,10 @@ service cloud.firestore {
 
     match /leaderboard/{cityId}/weeks/{weekKey}/scores/{uid} {
       allow read: if isAuthed();
-      allow write: if isOwner(uid);
+      // Scores are written ONLY by the backend Admin SDK after a validated
+      // game completion. Direct client writes are forbidden to prevent score
+      // tampering (a client could otherwise POST an arbitrary score for itself).
+      allow write: if false;
     }
 
     // ─── Referrals ─────────────────────────────────────────────────────────

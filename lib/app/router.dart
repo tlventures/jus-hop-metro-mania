@@ -29,23 +29,33 @@ import '../features/social/presentation/friends_screen.dart';
 import '../features/stamps/presentation/stamps_screen.dart';
 import '../features/trip/presentation/trip_mode_screen.dart';
 
+const _kOnboardingKey = 'hasCompletedOnboarding';
+
+/// Synchronous cache of the onboarding flag. [_redirect] runs on every
+/// navigation, so it must not await disk I/O (that introduced a visible
+/// per-navigation async gap / flicker on slower devices). We hydrate this once
+/// in [initializeRouter] at boot and keep it in sync on every write.
+bool _onboardingCompleteCached = false;
+
 Future<void> initializeRouter() async {
-  await SharedPreferences.getInstance();
+  final prefs = await SharedPreferences.getInstance();
+  _onboardingCompleteCached = prefs.getBool(_kOnboardingKey) ?? false;
 }
 
 Future<void> setOnboardingComplete() async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.setBool('hasCompletedOnboarding', true);
+  await prefs.setBool(_kOnboardingKey, true);
+  _onboardingCompleteCached = true;
 }
 
 Future<void> clearOnboardingFlag() async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('hasCompletedOnboarding');
+  await prefs.remove(_kOnboardingKey);
+  _onboardingCompleteCached = false;
 }
 
-Future<String?> _redirect(BuildContext context, GoRouterState state) async {
-  final prefs = await SharedPreferences.getInstance();
-  final doneOnboarding = prefs.getBool('hasCompletedOnboarding') ?? false;
+String? _redirect(BuildContext context, GoRouterState state) {
+  final doneOnboarding = _onboardingCompleteCached;
   final path = state.uri.path;
 
   // Not onboarded yet → force to onboarding (allow /onboarding itself)
@@ -237,36 +247,38 @@ class _NavShell extends StatelessWidget {
           NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => _navigateToTab(context, index),
+            // Tooltips double as the accessibility (TalkBack) announcement for
+            // each destination; an empty string suppressed it.
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home),
                 label: 'Home',
-                tooltip: '',
+                tooltip: 'Home',
               ),
               NavigationDestination(
                 icon: Icon(Icons.train_outlined),
                 selectedIcon: Icon(Icons.train),
                 label: 'Ride',
-                tooltip: '',
+                tooltip: 'Ride mode',
               ),
               NavigationDestination(
                 icon: Icon(Icons.sports_esports_outlined),
                 selectedIcon: Icon(Icons.sports_esports),
                 label: 'Play',
-                tooltip: '',
+                tooltip: 'Play games',
               ),
               NavigationDestination(
                 icon: Icon(Icons.wallet_outlined),
                 selectedIcon: Icon(Icons.wallet),
                 label: 'Wallet',
-                tooltip: '',
+                tooltip: 'Wallet and rewards',
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
                 label: 'Profile',
-                tooltip: '',
+                tooltip: 'Profile',
               ),
             ],
           ),

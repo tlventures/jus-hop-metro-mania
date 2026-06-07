@@ -17,6 +17,10 @@ class HomeData {
   final List<Map<String, dynamic>> games;
   final List<Map<String, dynamic>> featuredVideos;
 
+  /// Server-driven client configuration (e.g. minSupportedBuild for the
+  /// force-update gate). Empty when the backend doesn't send it.
+  final Map<String, dynamic> appConfig;
+
   const HomeData({
     required this.profile,
     required this.streak,
@@ -24,6 +28,7 @@ class HomeData {
     required this.wallet,
     required this.games,
     required this.featuredVideos,
+    this.appConfig = const {},
   });
 
   factory HomeData.fromJson(Map<String, dynamic> json) {
@@ -41,6 +46,7 @@ class HomeData {
       wallet:        (json['wallet']  as Map<String, dynamic>?) ?? {},
       games:         asMaps(json['games']),
       featuredVideos: asMaps(json['featuredVideos']),
+      appConfig:     (json['appConfig'] as Map<String, dynamic>?) ?? {},
     );
   }
 }
