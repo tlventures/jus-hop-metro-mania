@@ -225,20 +225,19 @@ class _NavShell extends StatelessWidget {
           Builder(
             builder: (context) {
               final scheme = Theme.of(context).colorScheme;
+              // Slim ad strip: a hairline divider + small symmetric clearance.
+              // Enough separation from nav targets to avoid accidental taps,
+              // but far tighter than the old ~56px of chrome.
               return Container(
                 width: double.infinity,
                 color: scheme.surface,
-                // 24px top gap (was 8) + 24px bottom gap (was 16).
-                // Keeps the ad ≥24px away from any interactive nav target,
-                // satisfying AdMob placement policy and reducing accidental taps.
-                padding: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
-                    const SizedBox(height: 24),
+                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+                    const SizedBox(height: 6),
                     const MetroSafarAdBanner(),
-                    const SizedBox(height: 8), // clearance below the ad unit itself
                   ],
                 ),
               );

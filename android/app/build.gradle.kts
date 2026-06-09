@@ -54,7 +54,7 @@ android {
         //   minSdk 23   — required by firebase_auth / google_mobile_ads 7.x.
         //   targetSdk 35 — Play Store mandates target API 35 for new app
         //     submissions and updates (effective Aug 2025).
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
