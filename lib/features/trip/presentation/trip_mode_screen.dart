@@ -8,6 +8,12 @@ import 'package:metrosafar/design_system/tokens/typography.dart';
 import 'package:metrosafar/features/trip/application/trip_state_provider.dart';
 import 'package:metrosafar/models/metro_station.dart';
 
+// Shared visual tokens — match the Home dashboard aesthetic.
+const Color _canvas = Color(0xFFF4F6F8);
+const List<BoxShadow> _softShadow = [
+  BoxShadow(color: Color(0x12000000), blurRadius: 16, offset: Offset(0, 6)),
+];
+
 class TripModeScreen extends ConsumerStatefulWidget {
   const TripModeScreen({super.key});
 
@@ -28,7 +34,10 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
     final notifier = ref.read(tripModeProvider.notifier);
 
     return Scaffold(
+      backgroundColor: _canvas,
       appBar: AppBar(
+        backgroundColor: _canvas,
+        scrolledUnderElevation: 0,
         title: const Text('Ride'),
         actions: [
           if (state.outboxCount > 0)
@@ -61,6 +70,7 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
               _StationPicker(
                 label: 'Board at',
                 icon: Icons.trip_origin,
+                accent: AppColors.electricTeal,
                 stations: state.stations,
                 value: state.selectedStartStationId,
                 onChanged: (v) { if (v != null) notifier.selectStart(v); },
@@ -69,6 +79,7 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
               _StationPicker(
                 label: 'Get off at',
                 icon: Icons.location_on_outlined,
+                accent: AppColors.signalPink,
                 stations: state.stations,
                 value: state.selectedEndStationId,
                 onChanged: (v) { if (v != null) notifier.selectEnd(v); },
@@ -120,16 +131,25 @@ class _HeroCard extends StatelessWidget {
         : null;
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s6),
+      padding: const EdgeInsets.all(AppSpacing.s5),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: active
               ? [AppColors.mintSuccess, AppColors.metroIndigo]
-              : [AppColors.gradientStart, AppColors.gradientEnd],
+              : [AppColors.cityInk, AppColors.electricTeal, AppColors.signalPink],
+          stops: active ? null : const [0.0, 0.55, 1.0],
         ),
-        borderRadius: AppRadius.borderRadiusXXL,
+        borderRadius: AppRadius.borderRadiusXL,
+        boxShadow: [
+          BoxShadow(
+            color: (active ? AppColors.mintSuccess : AppColors.electricTeal)
+                .withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +169,8 @@ class _HeroCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.s4),
           Text(
             active ? 'You\'re on the metro' : 'Start your commute',
-            style: AppTypography.displaySmall.copyWith(color: Colors.white),
+            style: AppTypography.headlineMedium
+                .copyWith(color: Colors.white, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: AppSpacing.s2),
           if (active && startName != null && endName != null)
@@ -265,6 +286,7 @@ class _ProgressBar extends StatelessWidget {
 class _StationPicker extends StatelessWidget {
   final String label;
   final IconData icon;
+  final Color accent;
   final List<MetroStation> stations;
   final String? value;
   final ValueChanged<String?> onChanged;
@@ -272,6 +294,7 @@ class _StationPicker extends StatelessWidget {
   const _StationPicker({
     required this.label,
     required this.icon,
+    required this.accent,
     required this.stations,
     required this.value,
     required this.onChanged,
@@ -280,25 +303,36 @@ class _StationPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final safeValue = stations.any((s) => s.id == value) ? value : null;
-    return DropdownButtonFormField<String>(
-      initialValue: safeValue,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 20),
-        border: const OutlineInputBorder(borderRadius: AppRadius.borderRadiusL),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s4,
-          vertical: AppSpacing.s4,
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppRadius.borderRadiusL,
+        boxShadow: _softShadow,
       ),
-      items: stations
-          .map((s) => DropdownMenuItem<String>(
-                value: s.id,
-                child: Text('${s.name} · ${s.line}',
-                    overflow: TextOverflow.ellipsis),
-              ))
-          .toList(),
-      onChanged: stations.isEmpty ? null : onChanged,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
+      child: DropdownButtonFormField<String>(
+        initialValue: safeValue,
+        // Constrain the selected-item row to the field width so long station
+        // names ellipsize instead of overflowing (was a 17px right overflow).
+        isExpanded: true,
+        icon: const Icon(Icons.expand_more_rounded),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20, color: accent),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
+        ),
+        items: stations
+            .map((s) => DropdownMenuItem<String>(
+                  value: s.id,
+                  child: Text('${s.name} · ${s.line}',
+                      overflow: TextOverflow.ellipsis),
+                ))
+            .toList(),
+        onChanged: stations.isEmpty ? null : onChanged,
+      ),
     );
   }
 }
@@ -315,11 +349,14 @@ class _RideButton extends StatelessWidget {
     final active = state.hasActiveTrip;
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: AppSpacing.buttonHeight,
       child: FilledButton.icon(
         style: FilledButton.styleFrom(
           backgroundColor:
-              active ? Theme.of(context).colorScheme.error : null,
+              active ? Theme.of(context).colorScheme.error : AppColors.neonLime,
+          foregroundColor: active ? Colors.white : AppColors.cityInk,
+          textStyle:
+              AppTypography.labelLarge.copyWith(fontWeight: FontWeight.w800),
           shape: RoundedRectangleBorder(
             borderRadius: AppRadius.borderRadiusXL,
           ),
@@ -355,7 +392,8 @@ class _RideSummaryCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.s5),
       decoration: BoxDecoration(
         color: cs.tertiaryContainer,
-        borderRadius: AppRadius.borderRadiusXL,
+        borderRadius: AppRadius.borderRadiusL,
+        boxShadow: _softShadow,
       ),
       child: Row(
         children: [
@@ -466,15 +504,16 @@ class _FeatureHighlights extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s5),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: AppRadius.borderRadiusXXL,
+        color: Colors.white,
+        borderRadius: AppRadius.borderRadiusL,
+        boxShadow: _softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('While you ride',
               style: AppTypography.titleMedium
-                  .copyWith(color: cs.onSurface)),
+                  .copyWith(color: cs.onSurface, fontWeight: FontWeight.w800)),
           const SizedBox(height: AppSpacing.s2),
           Text(
             'Start a ride to unlock games, audio stories, and station stamps matched to your commute length.',
@@ -527,7 +566,14 @@ class _ContentCard extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: gradient,
         ),
-        borderRadius: AppRadius.borderRadiusXXL,
+        borderRadius: AppRadius.borderRadiusXL,
+        boxShadow: [
+          BoxShadow(
+            color: gradient.first.withValues(alpha: 0.28),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

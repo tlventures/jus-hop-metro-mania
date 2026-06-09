@@ -119,26 +119,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         .where((q) => q.isCompleted)
         .fold<int>(0, (s, q) => s + q.points);
 
+    // Use push() (not go()) so the Android back button returns to Home instead
+    // of exiting the app — go() replaces the navigation stack.
     final quickActions = <_Action>[
       _Action(Icons.ondemand_video_rounded, 'Watch', 15, AppColors.signalPink,
-          () => context.go('/wallet')),
+          () => context.push('/learn')),
       _Action(Icons.menu_book_rounded, 'Read', 15, AppColors.skyPop,
-          () => context.go('/learn')),
+          () => context.push('/learn')),
       _Action(Icons.quiz_rounded, 'Quiz', 25, AppColors.mangoPop,
-          () => context.go('/learn')),
+          () => context.push('/learn')),
       _Action(Icons.confirmation_number_rounded, 'Tickets', 0,
-          AppColors.metroIndigo, () => context.go('/booking')),
+          AppColors.metroIndigo, () => context.push('/booking')),
       _Action(Icons.group_add_rounded, 'Refer', 0, AppColors.electricTeal,
-          () => context.go('/referral')),
+          () => context.push('/referral')),
       if (flags.liveEtas)
         _Action(Icons.route_rounded, 'Journey', 0, AppColors.metroIndigo,
-            () => context.go('/journey-planner')),
+            () => context.push('/journey-planner')),
       if (flags.stamps)
         _Action(Icons.local_activity_rounded, 'Stamps', 0, AppColors.signalPink,
-            () => context.go('/stamps')),
+            () => context.push('/stamps')),
       if (flags.audioStories)
         _Action(Icons.headphones_rounded, 'Audio', 0, AppColors.skyPop,
-            () => context.go('/audio')),
+            () => context.push('/audio')),
     ];
 
     final gameSpecs = [

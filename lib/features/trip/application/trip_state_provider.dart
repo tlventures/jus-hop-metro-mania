@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/backend_service.dart';
+import 'package:metrosafar/services/location_service.dart';
 
 class TripModeState {
   final bool isLoading;
@@ -66,10 +67,13 @@ class TripModeState {
 
 class TripModeNotifier extends StateNotifier<TripModeState> {
   final BackendService _backendService;
+  final LocationService _locationService;
   Timer? _elapsedTimer;
   Timer? _heartbeatTimer;
 
-  TripModeNotifier(this._backendService) : super(const TripModeState());
+  TripModeNotifier(this._backendService, {LocationService? locationService})
+      : _locationService = locationService ?? LocationService(),
+        super(const TripModeState());
 
   @override
   void dispose() {
@@ -88,12 +92,20 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
           ? null
           : Map<String, dynamic>.from(active['trip'] as Map);
 
+      // Auto-select the nearest station as "Board at" when the user hasn't
+      // chosen one and there's no active trip. Best-effort: silently keeps the
+      // current selection if location is unavailable/denied.
+      var startId = state.selectedStartStationId;
+      if (trip == null && startId == null && stations.isNotEmpty) {
+        startId = await _nearestStationId(stations);
+      }
+
       state = state.copyWith(
         isLoading: false,
         stations: stations,
         activeTrip: trip,
         clearActiveTrip: trip == null,
-        selectedStartStationId: state.selectedStartStationId,
+        selectedStartStationId: startId,
         selectedEndStationId: state.selectedEndStationId,
         outboxCount: outboxCount,
       );
@@ -105,6 +117,18 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
         isLoading: false,
         statusMessage: 'Trip Mode is using cached data until backend is reachable.',
       );
+    }
+  }
+
+  /// Best-effort nearest-station lookup; returns null if location is
+  /// unavailable or permission is denied (caller leaves the picker unset).
+  Future<String?> _nearestStationId(List<MetroStation> stations) async {
+    try {
+      final pos = await _locationService.getCurrentLocation();
+      return _locationService.getNearestStation(pos, stations)?.id;
+    } catch (e) {
+      debugPrint('TripModeNotifier: nearest-station lookup skipped: $e');
+      return null;
     }
   }
 

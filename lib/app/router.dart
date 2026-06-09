@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../design_system/components/ad_banner.dart';
@@ -206,15 +207,57 @@ int _getSelectedIndex(String location) {
   return 0;
 }
 
-class _NavShell extends StatelessWidget {
+class _NavShell extends StatefulWidget {
   final Widget child;
   final int selectedIndex;
 
   const _NavShell({required this.child, required this.selectedIndex});
 
   @override
+  State<_NavShell> createState() => _NavShellState();
+}
+
+class _NavShellState extends State<_NavShell> {
+  DateTime? _lastBackPress;
+
+  /// Global back policy for the bottom-nav tabs (the shell has no inner stack,
+  /// so a raw back would otherwise exit the app from any tab):
+  ///   • If a detail route is pushed above the shell (e.g. /learn, /game/*) →
+  ///     return false so go_router pops it normally.
+  ///   • On a non-Home tab → return to Home.
+  ///   • On Home → require a second back within 2s to actually exit.
+  Future<bool> _onBack() async {
+    if (appRouter.canPop()) return false; // let go_router pop the pushed route
+
+    if (widget.selectedIndex != 0) {
+      appRouter.go('/home');
+      return true;
+    }
+    final now = DateTime.now();
+    if (_lastBackPress == null ||
+        now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+      _lastBackPress = now;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Press back again to exit'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return true;
+    }
+    await SystemNavigator.pop();
+    return true;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final selectedIndex = widget.selectedIndex;
+    final child = widget.child;
+    return BackButtonListener(
+      onBackButtonPressed: _onBack,
+      child: Scaffold(
       body: Column(children: [const OfflineBanner(), Expanded(child: child)]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -282,6 +325,7 @@ class _NavShell extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }
