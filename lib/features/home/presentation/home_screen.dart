@@ -120,14 +120,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         .fold<int>(0, (s, q) => s + q.points);
 
     // Use push() (not go()) so the Android back button returns to Home instead
-    // of exiting the app — go() replaces the navigation stack.
+    // of exiting the app — go() replaces the navigation stack. Each chip points
+    // to a DISTINCT destination (the Learn chips deep-link to their section).
     final quickActions = <_Action>[
-      _Action(Icons.ondemand_video_rounded, 'Watch', 15, AppColors.signalPink,
-          () => context.push('/learn')),
       _Action(Icons.menu_book_rounded, 'Read', 15, AppColors.skyPop,
-          () => context.push('/learn')),
+          () => context.push('/learn?section=articles')),
       _Action(Icons.quiz_rounded, 'Quiz', 25, AppColors.mangoPop,
-          () => context.push('/learn')),
+          () => context.push('/learn?section=surveys')),
+      _Action(Icons.auto_stories_rounded, 'Stories', 25, AppColors.signalPink,
+          () => context.push('/learn?section=stories')),
       _Action(Icons.confirmation_number_rounded, 'Tickets', 0,
           AppColors.metroIndigo, () => context.push('/booking')),
       _Action(Icons.group_add_rounded, 'Refer', 0, AppColors.electricTeal,
@@ -136,10 +137,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         _Action(Icons.route_rounded, 'Journey', 0, AppColors.metroIndigo,
             () => context.push('/journey-planner')),
       if (flags.stamps)
-        _Action(Icons.local_activity_rounded, 'Stamps', 0, AppColors.signalPink,
+        _Action(Icons.local_activity_rounded, 'Stamps', 0, AppColors.skyPop,
             () => context.push('/stamps')),
       if (flags.audioStories)
-        _Action(Icons.headphones_rounded, 'Audio', 0, AppColors.skyPop,
+        _Action(Icons.headphones_rounded, 'Audio', 0, AppColors.electricTeal,
             () => context.push('/audio')),
     ];
 

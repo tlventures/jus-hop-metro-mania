@@ -18,9 +18,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.tlventures.metrosafar"
-    // Pin compileSdk to 35 (>= targetSdk). Explicit rather than
-    // flutter.compileSdkVersion so a toolchain bump can't shift it under us.
-    compileSdk = 35
+    // compileSdk 36: required by google_mobile_ads 9.x and several other
+    // plugins. targetSdk stays at 35 (Play's current requirement); compiling
+    // against a higher SDK is backward compatible.
+    compileSdk = 36
 
     // Update NDK version to match what plugins require
     ndkVersion = "29.0.13113456"

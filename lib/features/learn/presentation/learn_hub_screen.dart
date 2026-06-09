@@ -14,7 +14,12 @@ import 'surveys_screen.dart';
 import 'stories_screen.dart';
 
 class LearnHubScreen extends ConsumerStatefulWidget {
-  const LearnHubScreen({super.key});
+  /// Optional deep-link target: 'articles' | 'surveys' | 'stories'. When set,
+  /// the matching sub-screen is opened immediately (so the Home quick-actions
+  /// land on the right content instead of all on the hub).
+  final String? initialSection;
+
+  const LearnHubScreen({super.key, this.initialSection});
 
   @override
   ConsumerState<LearnHubScreen> createState() => _LearnHubScreenState();
@@ -28,6 +33,24 @@ class _LearnHubScreenState extends ConsumerState<LearnHubScreen> {
       ref.read(articlesProvider.notifier).fetchArticles();
       ref.read(surveysProvider.notifier).fetchSurveys();
       ref.read(storiesProvider.notifier).fetchStories();
+    });
+    _openInitialSection();
+  }
+
+  void _openInitialSection() {
+    final section = widget.initialSection;
+    if (section == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final Widget? target = switch (section) {
+        'articles' => const ArticlesScreen(),
+        'surveys' => const SurveysScreen(),
+        'stories' => const StoriesScreen(),
+        _ => null,
+      };
+      if (target != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => target));
+      }
     });
   }
 

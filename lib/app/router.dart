@@ -128,7 +128,8 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/learn',
-      builder: (context, state) => const LearnHubScreen(),
+      builder: (context, state) =>
+          LearnHubScreen(initialSection: state.uri.queryParameters['section']),
     ),
     GoRoute(
       path: '/my-redemptions',

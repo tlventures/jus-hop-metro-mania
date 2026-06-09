@@ -96,8 +96,12 @@ class StreakNotifier extends StateNotifier<Streak> {
         return true;
       }
     } catch (e) {
-      // 400 = already claimed within 24h; not an error worth surfacing.
-      debugPrint('StreakNotifier.claimStreak: $e');
+      // 400 "already counted today" is the expected no-op when the streak was
+      // already claimed within 24h — stay silent. Only log genuine failures.
+      final msg = e.toString();
+      if (!msg.contains('already counted') && !msg.contains('already claimed')) {
+        debugPrint('StreakNotifier.claimStreak: $e');
+      }
     }
     return false;
   }
