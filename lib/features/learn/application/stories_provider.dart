@@ -21,11 +21,12 @@ class StoriesNotifier extends StateNotifier<List<StationStory>> {
     }
   }
 
-  Future<void> completeStory(String storyId) async {
+  Future<bool> completeStory(String storyId) async {
     try {
       await _backendService.completeStory(storyId);
     } catch (e) {
       debugPrint('StoriesNotifier.completeStory error: $e');
+      return false;
     }
 
     state = state.map((story) {
@@ -34,6 +35,7 @@ class StoriesNotifier extends StateNotifier<List<StationStory>> {
       }
       return story;
     }).toList();
+    return true;
   }
 
   int get completedCount => state.where((s) => s.isCompleted).length;

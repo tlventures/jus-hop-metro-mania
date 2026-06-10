@@ -189,7 +189,7 @@ class _TriviaScreenState extends ConsumerState<TriviaScreen> {
               Map<String, dynamic>.from(result!['trivia'] as Map),
             )
             : null;
-    final pointsEarned = (result?['pointsEarned'] as num?)?.toInt() ?? score;
+    final pointsEarned = (result?['pointsEarned'] as num?)?.toInt() ?? 0;
     if (rankData != null) {
       ref.read(triviaScoreProvider.notifier).replace(rankData);
     }
@@ -197,10 +197,13 @@ class _TriviaScreenState extends ConsumerState<TriviaScreen> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
+    final commuteLocked = result == null;
     final rankLine =
-        rankData?.rank == null
-            ? 'City rank will appear once more players join today.'
-            : 'City rank: #${rankData!.rank} of ${rankData.playerCount} players today';
+        commuteLocked
+            ? 'Open Ride Mode to earn points for trivia runs.'
+            : rankData?.rank == null
+                ? 'City rank will appear once more players join today.'
+                : 'City rank: #${rankData!.rank} of ${rankData.playerCount} players today';
     final personalBest = rankData != null && score >= rankData.personalRecord;
 
     showModalBottomSheet(
@@ -211,7 +214,9 @@ class _TriviaScreenState extends ConsumerState<TriviaScreen> {
       builder:
           (context) => GameEndBottomSheet(
             title:
-                personalBest
+                commuteLocked
+                    ? 'Ride Mode required'
+                    : personalBest
                     ? '🏆 New personal best!'
                     : (score > 80 ? '🌟 Awesome!' : '👏 Nice Job!'),
             score: score,

@@ -12,9 +12,10 @@ class SurveysNotifier extends StateNotifier<List<Survey>> {
     try {
       final data = await _backendService.getSurveys();
       if (!mounted) return;
-      final surveys = (data['surveys'] as List<dynamic>? ?? [])
-          .map((s) => Survey.fromJson(Map<String, dynamic>.from(s as Map)))
-          .toList();
+      final surveys =
+          (data['surveys'] as List<dynamic>? ?? [])
+              .map((s) => Survey.fromJson(Map<String, dynamic>.from(s as Map)))
+              .toList();
       state = surveys;
     } catch (e) {
       debugPrint('SurveysNotifier.fetchSurveys error: $e');
@@ -22,29 +23,35 @@ class SurveysNotifier extends StateNotifier<List<Survey>> {
     }
   }
 
-  Future<void> submitSurvey(String surveyId, String selectedOption) async {
+  Future<bool> submitSurvey(String surveyId, String selectedOption) async {
     try {
       await _backendService.submitSurvey(surveyId, selectedOption);
     } catch (e) {
       debugPrint('SurveysNotifier.submitSurvey error: $e');
+      return false;
     }
 
-    if (!mounted) return;
-    state = state.map((survey) {
-      if (survey.id == surveyId) {
-        return survey.copyWith(isCompleted: true);
-      }
-      return survey;
-    }).toList();
+    if (!mounted) return false;
+    state =
+        state.map((survey) {
+          if (survey.id == surveyId) {
+            return survey.copyWith(isCompleted: true);
+          }
+          return survey;
+        }).toList();
+    return true;
   }
 
   int get completedCount => state.where((s) => s.isCompleted).length;
-  int get totalPoints => state.fold(0, (sum, s) => sum + (s.isCompleted ? s.points : 0));
+  int get totalPoints =>
+      state.fold(0, (sum, s) => sum + (s.isCompleted ? s.points : 0));
 }
 
 final backendServiceSurveysProvider = Provider((ref) => BackendService());
 
-final surveysProvider = StateNotifierProvider<SurveysNotifier, List<Survey>>((ref) {
+final surveysProvider = StateNotifierProvider<SurveysNotifier, List<Survey>>((
+  ref,
+) {
   final backendService = ref.watch(backendServiceSurveysProvider);
   return SurveysNotifier(backendService);
 });

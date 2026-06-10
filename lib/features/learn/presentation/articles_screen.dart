@@ -123,8 +123,9 @@ class _ArticlesScreenState extends ConsumerState<ArticlesScreen> {
     );
   }
 
-  void _showArticleDetail(BuildContext context, dynamic article) {
-    ref.read(articlesProvider.notifier).markArticleRead(article.id);
+  Future<void> _showArticleDetail(BuildContext context, dynamic article) async {
+    final marked = await ref.read(articlesProvider.notifier).markArticleRead(article.id);
+    if (!context.mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -135,6 +136,15 @@ class _ArticlesScreenState extends ConsumerState<ArticlesScreen> {
       ),
       builder: (context) => _ArticleDetail(article: article),
     );
+
+    if (!marked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Open Ride Mode to earn article points.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
 

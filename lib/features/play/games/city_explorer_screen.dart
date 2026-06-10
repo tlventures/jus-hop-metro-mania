@@ -18,7 +18,8 @@ class CityExplorerScreen extends ConsumerStatefulWidget {
   ConsumerState<CityExplorerScreen> createState() => _CityExplorerScreenState();
 }
 
-class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with TickerProviderStateMixin {
+class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen>
+    with TickerProviderStateMixin {
   late List<Landmark> landmarks;
   late int discoveredCount;
   late int score;
@@ -37,22 +38,34 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
     if (pack == null || pack.isEmpty) {
       // Generic fallback so the game never crashes on empty data
       return [
-        Landmark(id: 'generic', name: 'Metro Station', category: 'transit',
-                 lat: 0, lng: 0, description: 'Start exploring your city!', image: '🚇'),
+        Landmark(
+          id: 'generic',
+          name: 'Metro Station',
+          category: 'transit',
+          lat: 0,
+          lng: 0,
+          description: 'Start exploring your city!',
+          image: '🚇',
+        ),
       ];
     }
-    return pack.landmarks.map((l) => Landmark(
-      id: l.id,
-      name: l.localizedName(locale),
-      category: _capitalize(l.category),
-      lat: l.lat,
-      lng: l.lng,
-      description: l.localizedDescription(locale),
-      image: l.icon,
-    )).toList();
+    return pack.landmarks
+        .map(
+          (l) => Landmark(
+            id: l.id,
+            name: l.localizedName(locale),
+            category: _capitalize(l.category),
+            lat: l.lat,
+            lng: l.lng,
+            description: l.localizedDescription(locale),
+            image: l.icon,
+          ),
+        )
+        .toList();
   }
 
-  String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   @override
   void initState() {
@@ -67,13 +80,13 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
       _startTimer();
     });
     // Provide initial empty state so build doesn't crash
-    landmarks       = [];
+    landmarks = [];
     discoveredCount = 0;
-    score           = 0;
-    elapsedSeconds  = 0;
-    timerRunning    = false;
-    gameCompleted   = false;
-    selectedFilter  = 'All';
+    score = 0;
+    elapsedSeconds = 0;
+    timerRunning = false;
+    gameCompleted = false;
+    selectedFilter = 'All';
   }
 
   @override
@@ -83,16 +96,21 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
   }
 
   void _initializeGame() {
-    landmarks = allLandmarks.map((l) => Landmark(
-          id: l.id,
-          name: l.name,
-          category: l.category,
-          lat: l.lat,
-          lng: l.lng,
-          description: l.description,
-          image: l.image,
-          discovered: false,
-        )).toList();
+    landmarks =
+        allLandmarks
+            .map(
+              (l) => Landmark(
+                id: l.id,
+                name: l.name,
+                category: l.category,
+                lat: l.lat,
+                lng: l.lng,
+                description: l.description,
+                image: l.image,
+                discovered: false,
+              ),
+            )
+            .toList();
 
     discoveredCount = 0;
     score = 0;
@@ -137,51 +155,63 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
     });
   }
 
-  void _showGameEnd() {
+  Future<void> _showGameEnd() async {
     final points = score > 80 ? 50 : 35;
-
-    ref.read(gamesProvider.notifier).updateGameScore('city_explorer', score);
+    final result = await ref
+        .read(gamesProvider.notifier)
+        .updateGameScore('city_explorer', score);
+    if (!mounted) return;
+    final accepted = result != null;
+    final awardedPoints =
+        accepted ? (result['pointsEarned'] as num?)?.toInt() ?? points : 0;
 
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.borderRadiusXXL,
-      ),
-      builder: (context) => GameEndBottomSheet(
-        title: score >= 80 ? '⭐ Expert Explorer!' : '👍 Great Explorer!',
-        score: score,
-        points: points,
-        message: 'Discovered all $discoveredCount landmarks in ${_formatTime(elapsedSeconds)}',
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() {
-                  score = 0;
-                  discoveredCount = 0;
-                  elapsedSeconds = 0;
-                  gameCompleted = false;
-                  _initializeGame();
-                  _startTimer();
-                });
-              },
-              child: const Text('Explore Again'),
-            ),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.borderRadiusXXL),
+      builder:
+          (context) => GameEndBottomSheet(
+            title:
+                accepted
+                    ? (score >= 80
+                        ? '⭐ Expert Explorer!'
+                        : '👍 Great Explorer!')
+                    : 'Ride Mode required',
+            score: score,
+            points: awardedPoints,
+            message:
+                accepted
+                    ? 'Discovered all $discoveredCount landmarks in ${_formatTime(elapsedSeconds)}'
+                    : 'Explore while in transit to claim points.',
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      score = 0;
+                      discoveredCount = 0;
+                      elapsedSeconds = 0;
+                      gameCompleted = false;
+                      _initializeGame();
+                      _startTimer();
+                    });
+                  },
+                  child: const Text('Explore Again'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Share Discovery'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Share Discovery'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -201,8 +231,8 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final city     = ref.watch(activeCityProvider);
-    final locale   = ref.watch(localeProvider).languageCode;
+    final city = ref.watch(activeCityProvider);
+    final locale = ref.watch(localeProvider).languageCode;
     final cityName = city?.displayName(locale) ?? 'City';
 
     // Trigger landmark pack load + watch for it
@@ -263,7 +293,9 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
                       child: LinearProgressIndicator(
                         value: discoveredCount / landmarks.length,
                         minHeight: 8,
-                        backgroundColor: colorScheme.outline.withValues(alpha: 0.2),
+                        backgroundColor: colorScheme.outline.withValues(
+                          alpha: 0.2,
+                        ),
                         valueColor: AlwaysStoppedAnimation(colorScheme.primary),
                       ),
                     ),
@@ -302,11 +334,13 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
                       selected: selectedFilter == 'All',
                       onTap: () => setState(() => selectedFilter = 'All'),
                     ),
-                    ...categories.map((category) => _CategoryChip(
-                          label: category,
-                          selected: selectedFilter == category,
-                          onTap: () => setState(() => selectedFilter = category),
-                        )),
+                    ...categories.map(
+                      (category) => _CategoryChip(
+                        label: category,
+                        selected: selectedFilter == category,
+                        onTap: () => setState(() => selectedFilter = category),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -329,14 +363,16 @@ class _CityExplorerScreenState extends ConsumerState<CityExplorerScreen> with Ti
                     onTap: () => _discoverLandmark(landmark.id),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: landmark.discovered
-                            ? colorScheme.primary.withValues(alpha: 0.2)
-                            : colorScheme.surfaceContainer,
+                        color:
+                            landmark.discovered
+                                ? colorScheme.primary.withValues(alpha: 0.2)
+                                : colorScheme.surfaceContainer,
                         borderRadius: AppRadius.borderRadiusL,
                         border: Border.all(
-                          color: landmark.discovered
-                              ? colorScheme.primary.withValues(alpha: 0.5)
-                              : colorScheme.outline.withValues(alpha: 0.3),
+                          color:
+                              landmark.discovered
+                                  ? colorScheme.primary.withValues(alpha: 0.5)
+                                  : colorScheme.outline.withValues(alpha: 0.3),
                           width: landmark.discovered ? 2 : 1,
                         ),
                       ),
@@ -432,12 +468,14 @@ class _CategoryChip extends StatelessWidget {
             vertical: AppSpacing.s2,
           ),
           decoration: BoxDecoration(
-            color: selected ? colorScheme.primary : colorScheme.surfaceContainer,
+            color:
+                selected ? colorScheme.primary : colorScheme.surfaceContainer,
             borderRadius: AppRadius.borderRadiusS,
             border: Border.all(
-              color: selected
-                  ? colorScheme.primary
-                  : colorScheme.outline.withValues(alpha: 0.3),
+              color:
+                  selected
+                      ? colorScheme.primary
+                      : colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
           child: Text(

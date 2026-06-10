@@ -17,7 +17,8 @@ class WordPuzzleScreen extends ConsumerStatefulWidget {
   ConsumerState<WordPuzzleScreen> createState() => _WordPuzzleScreenState();
 }
 
-class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with TickerProviderStateMixin {
+class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen>
+    with TickerProviderStateMixin {
   late List<PuzzleWord> words;
   late int currentWordIndex;
   late int score;
@@ -35,36 +36,41 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
   /// Filters out very long names (> 14 chars) so the UI stays usable.
   List<Map<String, String>> _buildWordList() {
     final stations = ref.read(cityStationsProvider);
-    final city     = ref.read(activeCityProvider);
+    final city = ref.read(activeCityProvider);
     final cityName = city?.displayName('en') ?? 'Metro';
     final operator = city?.operatorShortName ?? 'Metro';
 
     if (stations.isEmpty) {
       // Generic fallback if no city loaded yet
       return [
-        {'word': 'METRO',    'scrambled': 'TREMO',    'hint': 'Underground transit'},
-        {'word': 'STATION',  'scrambled': 'TANSITO',  'hint': 'Where trains stop'},
+        {'word': 'METRO', 'scrambled': 'TREMO', 'hint': 'Underground transit'},
+        {
+          'word': 'STATION',
+          'scrambled': 'TANSITO',
+          'hint': 'Where trains stop',
+        },
         {'word': 'PLATFORM', 'scrambled': 'FORMLATP', 'hint': 'You board here'},
       ];
     }
 
-    final candidates = stations
-        .where((s) {
-          final name = s.name.replaceAll(' ', '').replaceAll('.', '');
-          return name.length >= 5 && name.length <= 14;
-        })
-        .toList()
-      ..shuffle();
+    final candidates =
+        stations.where((s) {
+            final name = s.name.replaceAll(' ', '').replaceAll('.', '');
+            return name.length >= 5 && name.length <= 14;
+          }).toList()
+          ..shuffle();
 
     return candidates.take(5).map((s) {
-      final clean = s.name.replaceAll(' ', '').replaceAll('.', '').toUpperCase();
+      final clean =
+          s.name.replaceAll(' ', '').replaceAll('.', '').toUpperCase();
       final lineLabel = s.lineIds.isNotEmpty ? s.lineIds.first : '';
       return {
-        'word':      clean,
+        'word': clean,
         'scrambled': (clean.split('')..shuffle()).join(),
-        'hint':      lineLabel.isNotEmpty
-            ? '$operator $lineLabel line station in $cityName'
-            : '$cityName Metro station',
+        'hint':
+            lineLabel.isNotEmpty
+                ? '$operator $lineLabel line station in $cityName'
+                : '$cityName Metro station',
       };
     }).toList();
   }
@@ -84,13 +90,14 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
   }
 
   void _initializeGame() {
-    words = wordList.asMap().entries.map((entry) {
-      return PuzzleWord(
-        word: entry.value['word']!,
-        hint: entry.value['hint']!,
-        scrambled: entry.value['scrambled']!,
-      );
-    }).toList();
+    words =
+        wordList.asMap().entries.map((entry) {
+          return PuzzleWord(
+            word: entry.value['word']!,
+            hint: entry.value['hint']!,
+            scrambled: entry.value['scrambled']!,
+          );
+        }).toList();
 
     currentWordIndex = 0;
     score = 0;
@@ -172,50 +179,60 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
     });
   }
 
-  void _showGameEnd() {
+  Future<void> _showGameEnd() async {
     final points = score > 100 ? 50 : 35;
-
-    ref.read(gamesProvider.notifier).updateGameScore('word_puzzle', score);
+    final result = await ref
+        .read(gamesProvider.notifier)
+        .updateGameScore('word_puzzle', score);
+    if (!mounted) return;
+    final accepted = result != null;
+    final awardedPoints =
+        accepted ? (result['pointsEarned'] as num?)?.toInt() ?? points : 0;
 
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.borderRadiusXXL,
-      ),
-      builder: (context) => GameEndBottomSheet(
-        title: score >= 100 ? '⭐ Outstanding!' : '👍 Well Done!',
-        score: score,
-        points: points,
-        message: 'Unscrambled ${words.length} words in ${_formatTime(elapsedSeconds)}',
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() {
-                  score = 0;
-                  elapsedSeconds = 0;
-                  gameCompleted = false;
-                  _initializeGame();
-                  _startTimer();
-                });
-              },
-              child: const Text('Play Again'),
-            ),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.borderRadiusXXL),
+      builder:
+          (context) => GameEndBottomSheet(
+            title:
+                accepted
+                    ? (score >= 100 ? '⭐ Outstanding!' : '👍 Well Done!')
+                    : 'Ride Mode required',
+            score: score,
+            points: awardedPoints,
+            message:
+                accepted
+                    ? 'Unscrambled ${words.length} words in ${_formatTime(elapsedSeconds)}'
+                    : 'Unscramble while in transit to claim points.',
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      score = 0;
+                      elapsedSeconds = 0;
+                      gameCompleted = false;
+                      _initializeGame();
+                      _startTimer();
+                    });
+                  },
+                  child: const Text('Play Again'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Share Score'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Share Score'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -231,8 +248,8 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
     final currentWord = words[currentWordIndex];
     final isComplete = placedLetters.every((l) => l.isNotEmpty);
 
-    final city     = ref.watch(activeCityProvider);
-    final locale   = ref.watch(localeProvider).languageCode;
+    final city = ref.watch(activeCityProvider);
+    final locale = ref.watch(localeProvider).languageCode;
     final cityName = city?.displayName(locale) ?? 'Metro';
 
     return GameShell(
@@ -307,28 +324,37 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
                       children: List.generate(
                         placedLetters.length,
                         (index) => GestureDetector(
-                          onTap: placedLetters[index].isNotEmpty
-                              ? () => _removeLetter(index)
-                              : null,
+                          onTap:
+                              placedLetters[index].isNotEmpty
+                                  ? () => _removeLetter(index)
+                                  : null,
                           child: Container(
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: placedLetters[index].isNotEmpty
-                                  ? colorScheme.primary
-                                  : colorScheme.outline.withValues(alpha: 0.2),
+                              color:
+                                  placedLetters[index].isNotEmpty
+                                      ? colorScheme.primary
+                                      : colorScheme.outline.withValues(
+                                        alpha: 0.2,
+                                      ),
                               borderRadius: AppRadius.borderRadiusM,
                               border: Border.all(
-                                color: colorScheme.outline.withValues(alpha: 0.3),
+                                color: colorScheme.outline.withValues(
+                                  alpha: 0.3,
+                                ),
                               ),
                             ),
                             child: Center(
                               child: Text(
                                 placedLetters[index],
                                 style: AppTypography.titleSmall.copyWith(
-                                  color: placedLetters[index].isNotEmpty
-                                      ? Colors.white
-                                      : colorScheme.onSurface.withValues(alpha: 0.5),
+                                  color:
+                                      placedLetters[index].isNotEmpty
+                                          ? Colors.white
+                                          : colorScheme.onSurface.withValues(
+                                            alpha: 0.5,
+                                          ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -366,7 +392,9 @@ class _WordPuzzleScreenState extends ConsumerState<WordPuzzleScreen> with Ticker
                   unscrambledLetters.length,
                   (index) => GestureDetector(
                     onTap: () {
-                      final emptySlot = placedLetters.indexWhere((l) => l.isEmpty);
+                      final emptySlot = placedLetters.indexWhere(
+                        (l) => l.isEmpty,
+                      );
                       if (emptySlot != -1) {
                         _placeLetter(index, emptySlot);
                       }
@@ -408,9 +436,5 @@ class PuzzleWord {
   final String hint;
   final String scrambled;
 
-  PuzzleWord({
-    required this.word,
-    required this.hint,
-    required this.scrambled,
-  });
+  PuzzleWord({required this.word, required this.hint, required this.scrambled});
 }

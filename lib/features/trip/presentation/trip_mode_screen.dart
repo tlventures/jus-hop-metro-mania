@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:metrosafar/core/city/current_city_provider.dart';
 import 'package:metrosafar/design_system/tokens/colors.dart';
 import 'package:metrosafar/design_system/tokens/radius.dart';
 import 'package:metrosafar/design_system/tokens/spacing.dart';
 import 'package:metrosafar/design_system/tokens/typography.dart';
 import 'package:metrosafar/features/trip/application/trip_state_provider.dart';
+import 'package:metrosafar/features/commute/presentation/ticket_verification_sheet.dart';
 import 'package:metrosafar/models/metro_station.dart';
 
 // Shared visual tokens — match the Home dashboard aesthetic.
@@ -73,7 +75,9 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
                 accent: AppColors.electricTeal,
                 stations: state.stations,
                 value: state.selectedStartStationId,
-                onChanged: (v) { if (v != null) notifier.selectStart(v); },
+                onChanged: (v) {
+                  if (v != null) notifier.selectStart(v);
+                },
               ),
               const SizedBox(height: AppSpacing.s3),
               _StationPicker(
@@ -82,11 +86,17 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
                 accent: AppColors.signalPink,
                 stations: state.stations,
                 value: state.selectedEndStationId,
-                onChanged: (v) { if (v != null) notifier.selectEnd(v); },
+                onChanged: (v) {
+                  if (v != null) notifier.selectEnd(v);
+                },
               ),
               const SizedBox(height: AppSpacing.s5),
             ],
-            _RideButton(state: state, notifier: notifier),
+            _RideButton(
+              state: state,
+              notifier: notifier,
+              onStart: _startVerifiedRide,
+            ),
             if (!state.hasActiveTrip && state.pointsEarnedThisRide > 0) ...[
               const SizedBox(height: AppSpacing.s5),
               _RideSummaryCard(points: state.pointsEarnedThisRide),
@@ -97,6 +107,17 @@ class _TripModeScreenState extends ConsumerState<TripModeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _startVerifiedRide() async {
+    final verification = await showRideVerificationSheet(context);
+    if (!mounted || verification == null) return;
+    await ref
+        .read(tripModeProvider.notifier)
+        .startVerifiedRide(
+          verification,
+          cityId: ref.read(activeCityProvider)?.id,
+        );
   }
 }
 
@@ -116,19 +137,21 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = state.hasActiveTrip;
-    final trip   = state.activeTrip;
+    final trip = state.activeTrip;
 
     String? startName;
     if (active && trip != null) {
       final startStation = trip['startStation'] as Map?;
       startName = startStation?['name'] as String? ?? 'Origin';
     }
-    final endName = active && state.selectedEndStationId != null
-        ? state.stations
-            .where((s) => s.id == state.selectedEndStationId)
-            .map((s) => s.name)
-            .firstOrNull ?? 'Destination'
-        : null;
+    final endName =
+        active && state.selectedEndStationId != null
+            ? state.stations
+                    .where((s) => s.id == state.selectedEndStationId)
+                    .map((s) => s.name)
+                    .firstOrNull ??
+                'Destination'
+            : null;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s5),
@@ -136,9 +159,14 @@ class _HeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: active
-              ? [AppColors.mintSuccess, AppColors.metroIndigo]
-              : [AppColors.cityInk, AppColors.electricTeal, AppColors.signalPink],
+          colors:
+              active
+                  ? [AppColors.mintSuccess, AppColors.metroIndigo]
+                  : [
+                    AppColors.cityInk,
+                    AppColors.electricTeal,
+                    AppColors.signalPink,
+                  ],
           stops: active ? null : const [0.0, 0.55, 1.0],
         ),
         borderRadius: AppRadius.borderRadiusXL,
@@ -162,15 +190,16 @@ class _HeroCard extends StatelessWidget {
                 size: 32,
               ),
               const Spacer(),
-              if (active)
-                _TimerBadge(elapsed: _elapsed()),
+              if (active) _TimerBadge(elapsed: _elapsed()),
             ],
           ),
           const SizedBox(height: AppSpacing.s4),
           Text(
             active ? 'You\'re on the metro' : 'Start your commute',
-            style: AppTypography.headlineMedium
-                .copyWith(color: Colors.white, fontWeight: FontWeight.w900),
+            style: AppTypography.headlineMedium.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           const SizedBox(height: AppSpacing.s2),
           if (active && startName != null && endName != null)
@@ -184,9 +213,11 @@ class _HeroCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.s4),
             _ProgressBar(
               remaining: state.remainingMinutes,
-              total: ((state.activeTrip?['expectedDurationSeconds'] as num?)
-                          ?.toInt() ?? 1200) ~/
-                      60,
+              total:
+                  ((state.activeTrip?['expectedDurationSeconds'] as num?)
+                          ?.toInt() ??
+                      1200) ~/
+                  60,
             ),
           ],
         ],
@@ -231,18 +262,22 @@ class _RouteRow extends StatelessWidget {
     return Row(
       children: [
         Flexible(
-          child: Text(from,
-              style: AppTypography.bodyMedium.copyWith(color: Colors.white),
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            from,
+            style: AppTypography.bodyMedium.copyWith(color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s2),
           child: Icon(Icons.arrow_forward, color: Colors.white70, size: 16),
         ),
         Flexible(
-          child: Text(to,
-              style: AppTypography.bodyMedium.copyWith(color: Colors.white),
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            to,
+            style: AppTypography.bodyMedium.copyWith(color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -251,14 +286,13 @@ class _RouteRow extends StatelessWidget {
 
 class _ProgressBar extends StatelessWidget {
   final int remaining; // minutes
-  final int total;     // minutes
+  final int total; // minutes
   const _ProgressBar({required this.remaining, required this.total});
 
   @override
   Widget build(BuildContext context) {
-    final fraction = total > 0
-        ? ((total - remaining) / total).clamp(0.0, 1.0)
-        : 0.0;
+    final fraction =
+        total > 0 ? ((total - remaining) / total).clamp(0.0, 1.0) : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -324,13 +358,18 @@ class _StationPicker extends StatelessWidget {
           focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
         ),
-        items: stations
-            .map((s) => DropdownMenuItem<String>(
-                  value: s.id,
-                  child: Text('${s.name} · ${s.line}',
-                      overflow: TextOverflow.ellipsis),
-                ))
-            .toList(),
+        items:
+            stations
+                .map(
+                  (s) => DropdownMenuItem<String>(
+                    value: s.id,
+                    child: Text(
+                      '${s.name} · ${s.line}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
         onChanged: stations.isEmpty ? null : onChanged,
       ),
     );
@@ -342,7 +381,12 @@ class _StationPicker extends StatelessWidget {
 class _RideButton extends StatelessWidget {
   final TripModeState state;
   final TripModeNotifier notifier;
-  const _RideButton({required this.state, required this.notifier});
+  final Future<void> Function() onStart;
+  const _RideButton({
+    required this.state,
+    required this.notifier,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -355,24 +399,25 @@ class _RideButton extends StatelessWidget {
           backgroundColor:
               active ? Theme.of(context).colorScheme.error : AppColors.neonLime,
           foregroundColor: active ? Colors.white : AppColors.cityInk,
-          textStyle:
-              AppTypography.labelLarge.copyWith(fontWeight: FontWeight.w800),
-          shape: RoundedRectangleBorder(
-            borderRadius: AppRadius.borderRadiusXL,
+          textStyle: AppTypography.labelLarge.copyWith(
+            fontWeight: FontWeight.w800,
           ),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.borderRadiusXL),
         ),
-        onPressed: state.isLoading
-            ? null
-            : active
+        onPressed:
+            state.isLoading
+                ? null
+                : active
                 ? notifier.endTrip
-                : notifier.startManualTrip,
-        icon: state.isLoading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(active ? Icons.flag_outlined : Icons.train_outlined),
+                : onStart,
+        icon:
+            state.isLoading
+                ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : Icon(active ? Icons.flag_outlined : Icons.train_outlined),
         label: Text(active ? 'End Ride' : 'Start Ride'),
       ),
     );
@@ -403,12 +448,18 @@ class _RideSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Ride complete!',
-                    style: AppTypography.titleMedium
-                        .copyWith(color: cs.onTertiaryContainer)),
-                Text('+$points pts earned this ride',
-                    style: AppTypography.bodyMedium
-                        .copyWith(color: cs.onTertiaryContainer)),
+                Text(
+                  'Ride complete!',
+                  style: AppTypography.titleMedium.copyWith(
+                    color: cs.onTertiaryContainer,
+                  ),
+                ),
+                Text(
+                  '+$points pts earned this ride',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: cs.onTertiaryContainer,
+                  ),
+                ),
               ],
             ),
           ),
@@ -431,8 +482,8 @@ class _AdaptiveContentSlot extends StatelessWidget {
     }
     final min = state.remainingMinutes;
     if (min > 20) return _AudioSlot();
-    if (min > 8)  return _TriviaSlot();
-    if (min > 3)  return _SpinSlot();
+    if (min > 8) return _TriviaSlot();
+    if (min > 3) return _SpinSlot();
     return _StampSlot();
   }
 }
@@ -511,14 +562,19 @@ class _FeatureHighlights extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('While you ride',
-              style: AppTypography.titleMedium
-                  .copyWith(color: cs.onSurface, fontWeight: FontWeight.w800)),
+          Text(
+            'While you ride',
+            style: AppTypography.titleMedium.copyWith(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: AppSpacing.s2),
           Text(
             'Start a ride to unlock games, audio stories, and station stamps matched to your commute length.',
-            style: AppTypography.bodyMedium
-                .copyWith(color: cs.onSurfaceVariant),
+            style: AppTypography.bodyMedium.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: AppSpacing.s4),
           Wrap(
@@ -591,20 +647,23 @@ class _ContentCard extends StatelessWidget {
                   color: Colors.white24,
                   borderRadius: AppRadius.borderRadiusM,
                 ),
-                child: Text(label,
-                    style: AppTypography.labelSmall
-                        .copyWith(color: Colors.white)),
+                child: Text(
+                  label,
+                  style: AppTypography.labelSmall.copyWith(color: Colors.white),
+                ),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.s3),
-          Text(title,
-              style:
-                  AppTypography.titleLarge.copyWith(color: Colors.white)),
+          Text(
+            title,
+            style: AppTypography.titleLarge.copyWith(color: Colors.white),
+          ),
           const SizedBox(height: AppSpacing.s2),
-          Text(body,
-              style: AppTypography.bodyMedium
-                  .copyWith(color: Colors.white70)),
+          Text(
+            body,
+            style: AppTypography.bodyMedium.copyWith(color: Colors.white70),
+          ),
           const SizedBox(height: AppSpacing.s4),
           OutlinedButton(
             style: OutlinedButton.styleFrom(
@@ -647,9 +706,11 @@ class _SyncBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.sync,
-                size: 16,
-                color: Theme.of(context).colorScheme.onErrorContainer),
+            Icon(
+              Icons.sync,
+              size: 16,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
             const SizedBox(width: AppSpacing.s1),
             Text(
               '$count',
@@ -687,9 +748,12 @@ class _InfoStrip extends StatelessWidget {
           Icon(Icons.info_outline, size: 16, color: cs.onPrimaryContainer),
           const SizedBox(width: AppSpacing.s2),
           Expanded(
-            child: Text(message,
-                style: AppTypography.bodySmall
-                    .copyWith(color: cs.onPrimaryContainer)),
+            child: Text(
+              message,
+              style: AppTypography.bodySmall.copyWith(
+                color: cs.onPrimaryContainer,
+              ),
+            ),
           ),
         ],
       ),

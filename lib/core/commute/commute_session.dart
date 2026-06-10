@@ -26,6 +26,7 @@ class CommuteSessionState {
   final double? speedKmh;
   final MetroStation? station;
   final DateTime? startedAt;
+  final bool rewardsEligible;
   final String? error;
 
   const CommuteSessionState({
@@ -36,31 +37,35 @@ class CommuteSessionState {
     this.speedKmh,
     this.station,
     this.startedAt,
+    this.rewardsEligible = false,
     this.error,
   });
 
   bool get isVisible =>
       phase == CommutePhase.confirmed || phase == CommutePhase.active;
-  bool get isActive => phase == CommutePhase.active;
+  bool get isActive => phase == CommutePhase.active && rewardsEligible;
 
   CommuteSessionState copyWith({
     CommutePhase? phase,
     String? sessionId,
+    bool clearSessionId = false,
     double? confidenceScore,
     double? vibrationScore,
     double? speedKmh,
     MetroStation? station,
     DateTime? startedAt,
+    bool? rewardsEligible,
     String? error,
   }) {
     return CommuteSessionState(
       phase: phase ?? this.phase,
-      sessionId: sessionId ?? this.sessionId,
+      sessionId: clearSessionId ? null : sessionId ?? this.sessionId,
       confidenceScore: confidenceScore ?? this.confidenceScore,
       vibrationScore: vibrationScore ?? this.vibrationScore,
       speedKmh: speedKmh ?? this.speedKmh,
       station: station ?? this.station,
       startedAt: startedAt ?? this.startedAt,
+      rewardsEligible: rewardsEligible ?? this.rewardsEligible,
       error: error,
     );
   }

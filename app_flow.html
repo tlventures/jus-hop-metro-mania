@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MetroSafar – App Screen Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; }
+  h1 { text-align: center; padding: 32px 16px 8px; font-size: 28px; color: #fff; letter-spacing: -0.5px; }
+  .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; font-size: 14px; }
+
+  /* ─── FLOW SECTIONS ─── */
+  .flow-section { margin: 0 auto 56px; max-width: 1200px; padding: 0 24px; }
+  .flow-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 20px; border-left: 3px solid #334155; padding-left: 12px; }
+
+  /* ─── FLOW ROW ─── */
+  .flow-row { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; }
+  .flow-step { display: flex; align-items: flex-start; }
+
+  /* Arrow */
+  .arrow { display: flex; align-items: center; padding: 0 6px; color: #475569; font-size: 20px; margin-top: 24px; }
+  .arrow.down { transform: rotate(90deg); margin-top: 8px; }
+  .arrow.branch { color: #7c3aed; }
+
+  /* ─── SCREEN CARD ─── */
+  .card {
+    background: #1e2433;
+    border: 1px solid #2d3748;
+    border-radius: 14px;
+    width: 168px;
+    min-height: 120px;
+    padding: 14px 14px 12px;
+    cursor: default;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .card .screen-icon { font-size: 22px; margin-bottom: 8px; }
+  .card .screen-name { font-size: 13px; font-weight: 600; color: #f1f5f9; line-height: 1.3; }
+  .card .screen-path { font-size: 11px; color: #64748b; margin-top: 3px; font-family: 'SF Mono', monospace; }
+  .card .screen-desc { font-size: 11px; color: #94a3b8; margin-top: 8px; line-height: 1.5; }
+  .card .badge { position: absolute; top: 10px; right: 10px; font-size: 10px; background: #1d4ed8; color: #bfdbfe; border-radius: 6px; padding: 2px 6px; font-weight: 600; }
+  .card .badge.modal { background: #7c2d12; color: #fed7aa; }
+  .card .badge.gate { background: #14532d; color: #bbf7d0; }
+
+  /* Color variants */
+  .card.auth  { border-color: #1e40af; }
+  .card.onboard { border-color: #5b21b6; }
+  .card.home  { border-color: #065f46; }
+  .card.ride  { border-color: #7c3aed; }
+  .card.play  { border-color: #9a3412; }
+  .card.wallet { border-color: #713f12; }
+  .card.profile { border-color: #1e3a5f; }
+  .card.overlay { border-color: #374151; border-style: dashed; }
+  .card.modal-card { border-color: #581c87; border-style: dashed; }
+
+  /* ─── VERTICAL BRANCH BLOCK ─── */
+  .v-branch { display: flex; flex-direction: column; gap: 10px; }
+  .v-branch-label { font-size: 10px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ─── LEGEND ─── */
+  .legend { display: flex; gap: 24px; flex-wrap: wrap; margin: 0 auto 48px; max-width: 1200px; padding: 0 24px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
+  .legend-box { width: 14px; height: 14px; border-radius: 4px; border: 1px solid; }
+
+  /* ─── TABLE OF CONTENTS ─── */
+  .toc { background: #1e2433; border: 1px solid #2d3748; border-radius: 14px; padding: 24px; max-width: 640px; margin: 0 auto 48px; }
+  .toc h3 { font-size: 14px; color: #94a3b8; margin-bottom: 16px; }
+  .toc ul { list-style: none; columns: 2; }
+  .toc li { margin-bottom: 8px; }
+  .toc a { color: #60a5fa; text-decoration: none; font-size: 13px; }
+  .toc a:hover { color: #93c5fd; }
+</style>
+</head>
+<body>
+
+<h1>MetroSafar · App Screen Flow</h1>
+<p class="subtitle">Every screen, its route, and how it connects · generated from source</p>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-box" style="border-color:#1e40af;background:#1e2433"></div> Auth</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#5b21b6;background:#1e2433"></div> Onboarding</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#065f46;background:#1e2433"></div> Home tab</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#7c3aed;background:#1e2433"></div> Ride tab</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#9a3412;background:#1e2433"></div> Play tab</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#713f12;background:#1e2433"></div> Wallet tab</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#1e3a5f;background:#1e2433"></div> Profile tab</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#374151;background:#1e2433;border-style:dashed"></div> Overlay / Sheet</div>
+  <div class="legend-item"><div class="legend-box" style="border-color:#581c87;background:#1e2433;border-style:dashed"></div> Modal push</div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     1. APP LAUNCH FLOW
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="launch">
+  <h2>1 · App Launch</h2>
+  <div class="flow-row">
+
+    <div class="flow-step">
+      <div class="card auth">
+        <div class="screen-icon">🚀</div>
+        <div class="screen-name">Splash</div>
+        <div class="screen-path">(initialLocation)</div>
+        <div class="screen-desc">Firebase init, auth check, redirect decision.</div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="flow-step">
+      <div class="v-branch">
+        <div class="v-branch-label">redirect logic</div>
+
+        <div class="flow-row">
+          <div class="card onboard">
+            <div class="screen-icon">👋</div>
+            <div class="screen-name">Onboarding</div>
+            <div class="screen-path">/onboarding</div>
+            <div class="screen-desc">First-run only. 8-page PageView, non-swipeable.</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="card auth">
+            <div class="screen-icon">🔑</div>
+            <div class="screen-name">Login</div>
+            <div class="screen-path">/login</div>
+            <div class="screen-desc">Phone/Google sign-in via Firebase Auth.</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="card home">
+            <div class="screen-icon">🏠</div>
+            <div class="screen-name">Home</div>
+            <div class="screen-path">/home</div>
+            <div class="screen-desc">Main dashboard. Bottom-nav tab 0.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     2. ONBOARDING FLOW (8 pages)
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="onboarding">
+  <h2>2 · Onboarding Pages (PageView – non-swipeable)</h2>
+  <div class="flow-row" style="flex-wrap:wrap; row-gap:12px;">
+
+    <div class="card onboard">
+      <div class="screen-icon">🌟</div>
+      <div class="screen-name">Welcome</div>
+      <div class="screen-path">page 0</div>
+      <div class="screen-desc">Brand intro. "Next" or "Skip" exits to /login.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">🎂</div>
+      <div class="screen-name">Age Gate</div>
+      <div class="screen-path">page 1</div>
+      <div class="screen-desc">DPDPA §9. Adults → page 2. Minors → Parental Consent modal.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card modal-card">
+      <div class="badge modal">modal</div>
+      <div class="screen-icon">👨‍👩‍👧</div>
+      <div class="screen-name">Parental Consent</div>
+      <div class="screen-path">(fullscreenDialog push)</div>
+      <div class="screen-desc">Minors only. Parent must accept. On continue → back to page 2.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">🎮</div>
+      <div class="screen-name">Games Feature</div>
+      <div class="screen-path">page 2</div>
+      <div class="screen-desc">Feature highlight: games during commute.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">📚</div>
+      <div class="screen-name">Learn Feature</div>
+      <div class="screen-path">page 3</div>
+      <div class="screen-desc">Feature highlight: articles, stories, surveys.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">🏆</div>
+      <div class="screen-name">Rewards Feature</div>
+      <div class="screen-path">page 4</div>
+      <div class="screen-desc">Feature highlight: points and redemptions.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">📍</div>
+      <div class="screen-name">Permissions</div>
+      <div class="screen-path">page 5</div>
+      <div class="screen-desc">Request location + notification permissions.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">🏙️</div>
+      <div class="screen-name">City Confirm</div>
+      <div class="screen-path">page 6</div>
+      <div class="screen-desc">Detect & confirm user's metro city. On confirm → /login.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card onboard">
+      <div class="screen-icon">🔒</div>
+      <div class="screen-name">Privacy Consent</div>
+      <div class="screen-path">page 7 (last)</div>
+      <div class="screen-desc">Accept or decline → /login either way.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     3. BOTTOM NAV TABS
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="tabs">
+  <h2>3 · Bottom Navigation Shell (5 tabs)</h2>
+  <div class="flow-row" style="gap:16px; flex-wrap:wrap;">
+
+    <div class="card home" style="width:190px;">
+      <div class="screen-icon">🏠</div>
+      <div class="screen-name">Home</div>
+      <div class="screen-path">/home · tab 0</div>
+      <div class="screen-desc">Streak, quests, wallet summary, live ETA card, disruption banner, commute overlay. Ad banner + nav below.</div>
+    </div>
+
+    <div class="card ride" style="width:190px;">
+      <div class="screen-icon">🚇</div>
+      <div class="screen-name">Ride</div>
+      <div class="screen-path">/ride · tab 1</div>
+      <div class="screen-desc">Hero card, station picker (Board at / Get off at), Start/End Ride button, adaptive content slot.</div>
+    </div>
+
+    <div class="card play" style="width:190px;">
+      <div class="screen-icon">🎮</div>
+      <div class="screen-name">Play Hub</div>
+      <div class="screen-path">/play · tab 2</div>
+      <div class="screen-desc">Game cards (Trivia, Sudoku, Word Puzzle, City Explorer, Daily Spin). Watch & Earn. Friends leaderboard link.</div>
+    </div>
+
+    <div class="card wallet" style="width:190px;">
+      <div class="screen-icon">👛</div>
+      <div class="screen-name">Wallet</div>
+      <div class="screen-path">/wallet · tab 3</div>
+      <div class="screen-desc">Points balance, transactions, reward cards. Links to My Redemptions.</div>
+    </div>
+
+    <div class="card profile" style="width:190px;">
+      <div class="screen-icon">👤</div>
+      <div class="screen-name">Profile</div>
+      <div class="screen-path">/profile · tab 4</div>
+      <div class="screen-desc">Identity, stats (streak, articles, surveys). Links to Settings, Language, Friends, Referral.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     4. HOME TAB → SUB-SCREENS
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="home-sub">
+  <h2>4 · Home tab → sub-screens</h2>
+  <div class="flow-row" style="gap:0;">
+
+    <div class="card home">
+      <div class="screen-icon">🏠</div>
+      <div class="screen-name">Home</div>
+      <div class="screen-path">/home</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+
+      <div class="flow-row">
+        <div class="card overlay">
+          <div class="screen-icon">🚉</div>
+          <div class="screen-name">Commute Overlay</div>
+          <div class="screen-path">(floating over Home)</div>
+          <div class="screen-desc">Auto-detects commute. Detected banner → Active panel. Content rail inside.</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="card overlay">
+          <div class="screen-icon">🎫</div>
+          <div class="screen-name">Ticket Verification Sheet</div>
+          <div class="screen-path">(bottom sheet)</div>
+          <div class="screen-desc">Scanner or manual entry to confirm trip.</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card home">
+          <div class="screen-icon">🔔</div>
+          <div class="screen-name">Notifications Inbox</div>
+          <div class="screen-path">/notifications-inbox</div>
+          <div class="screen-desc">Bell icon in Home app bar.</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card home">
+          <div class="screen-icon">🗺️</div>
+          <div class="screen-name">Journey Planner</div>
+          <div class="screen-path">/journey-planner</div>
+          <div class="badge gate">flag: liveEtas</div>
+          <div class="screen-desc">Plan a route with live ETAs.</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card home">
+          <div class="screen-icon">⚙️</div>
+          <div class="screen-name">Settings</div>
+          <div class="screen-path">/settings</div>
+          <div class="screen-desc">Gear icon in Home bar. Preferences, legal, account actions.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     5. RIDE TAB → ADAPTIVE CONTENT DURING ACTIVE RIDE
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="ride-sub">
+  <h2>5 · Ride tab → adaptive content (during active trip)</h2>
+  <div class="flow-row" style="gap:0;">
+
+    <div class="card ride">
+      <div class="screen-icon">🚇</div>
+      <div class="screen-name">Ride (active)</div>
+      <div class="screen-path">/ride</div>
+      <div class="screen-desc">Timer running. Adaptive slot picks content based on remaining minutes.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+
+      <div class="flow-row">
+        <div class="card ride">
+          <div class="screen-icon">🎧</div>
+          <div class="screen-name">Audio Stories</div>
+          <div class="screen-path">/audio · >20 min</div>
+          <div class="badge gate">flag: audioStories</div>
+          <div class="screen-desc">Long-ride content.</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card ride">
+          <div class="screen-icon">🧠</div>
+          <div class="screen-name">Play Hub (Trivia)</div>
+          <div class="screen-path">/play · 8–20 min</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card ride">
+          <div class="screen-icon">🎰</div>
+          <div class="screen-name">Play Hub (Spin)</div>
+          <div class="screen-path">/play · 3–8 min</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card ride">
+          <div class="screen-icon">📍</div>
+          <div class="screen-name">Station Stamps</div>
+          <div class="screen-path">/stamps · &lt;3 min</div>
+          <div class="badge gate">flag: stamps</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     6. PLAY TAB → GAME SCREENS
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="play-sub">
+  <h2>6 · Play tab → games</h2>
+  <div class="flow-row" style="gap:0;">
+
+    <div class="card play">
+      <div class="screen-icon">🎮</div>
+      <div class="screen-name">Play Hub</div>
+      <div class="screen-path">/play</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+
+      <div class="flow-row">
+        <div class="card play">
+          <div class="screen-icon">🧠</div>
+          <div class="screen-name">Trivia</div>
+          <div class="screen-path">/game/trivia</div>
+        </div>
+        <div class="arrow" style="margin-top:24px">·</div>
+        <div class="card play">
+          <div class="screen-icon">🔢</div>
+          <div class="screen-name">Sudoku</div>
+          <div class="screen-path">/game/sudoku</div>
+        </div>
+        <div class="arrow" style="margin-top:24px">·</div>
+        <div class="card play">
+          <div class="screen-icon">🔤</div>
+          <div class="screen-name">Word Puzzle</div>
+          <div class="screen-path">/game/word_puzzle</div>
+        </div>
+        <div class="arrow" style="margin-top:24px">·</div>
+        <div class="card play">
+          <div class="screen-icon">🗺️</div>
+          <div class="screen-name">City Explorer</div>
+          <div class="screen-path">/game/city_explorer</div>
+        </div>
+        <div class="arrow" style="margin-top:24px">·</div>
+        <div class="card play">
+          <div class="screen-icon">🎰</div>
+          <div class="screen-name">Daily Spin</div>
+          <div class="screen-path">/game/daily_spin</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card play">
+          <div class="screen-icon">👫</div>
+          <div class="screen-name">Friends</div>
+          <div class="screen-path">/friends</div>
+          <div class="screen-desc">Leaderboard & social.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     7. WALLET TAB → SUB-SCREENS
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="wallet-sub">
+  <h2>7 · Wallet tab → sub-screens</h2>
+  <div class="flow-row">
+
+    <div class="card wallet">
+      <div class="screen-icon">👛</div>
+      <div class="screen-name">Wallet</div>
+      <div class="screen-path">/wallet</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="card wallet">
+      <div class="screen-icon">🎁</div>
+      <div class="screen-name">My Redemptions</div>
+      <div class="screen-path">/my-redemptions</div>
+      <div class="screen-desc">History of redeemed rewards.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     8. PROFILE TAB → SUB-SCREENS
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="profile-sub">
+  <h2>8 · Profile tab → sub-screens</h2>
+  <div class="flow-row" style="gap:0;">
+
+    <div class="card profile">
+      <div class="screen-icon">👤</div>
+      <div class="screen-name">Profile</div>
+      <div class="screen-path">/profile</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+
+      <div class="flow-row">
+        <div class="card profile">
+          <div class="screen-icon">⚙️</div>
+          <div class="screen-name">Settings</div>
+          <div class="screen-path">/settings</div>
+          <div class="screen-desc">Preferences, legal, account actions.</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="card profile">
+          <div class="screen-icon">🌐</div>
+          <div class="screen-name">Language Selector</div>
+          <div class="screen-path">(from settings)</div>
+          <div class="screen-desc">10 Indian languages.</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card profile">
+          <div class="screen-icon">👫</div>
+          <div class="screen-name">Friends</div>
+          <div class="screen-path">/friends</div>
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="card profile">
+          <div class="screen-icon">🎫</div>
+          <div class="screen-name">Referral</div>
+          <div class="screen-path">/referral</div>
+          <div class="screen-desc">Share invite link, track rewards.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     9. LEARN (accessed from Home or deep-link)
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="learn">
+  <h2>9 · Learn Hub (from Home / deep-link)</h2>
+  <div class="flow-row" style="gap:0;">
+
+    <div class="card home">
+      <div class="screen-icon">📖</div>
+      <div class="screen-name">Learn Hub</div>
+      <div class="screen-path">/learn</div>
+      <div class="screen-desc">Three content types.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div class="card home">
+        <div class="screen-icon">📰</div>
+        <div class="screen-name">Articles</div>
+        <div class="screen-path">(from learn hub)</div>
+      </div>
+      <div class="card home">
+        <div class="screen-icon">📖</div>
+        <div class="screen-name">Stories</div>
+        <div class="screen-path">(from learn hub)</div>
+      </div>
+      <div class="card home">
+        <div class="screen-icon">📋</div>
+        <div class="screen-name">Surveys</div>
+        <div class="screen-path">(from learn hub)</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     10. MISC ROUTES
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="misc">
+  <h2>10 · Misc top-level routes</h2>
+  <div class="flow-row" style="gap:16px; flex-wrap:wrap;">
+
+    <div class="card">
+      <div class="screen-icon">🎟️</div>
+      <div class="screen-name">Booking (Coming Soon)</div>
+      <div class="screen-path">/booking</div>
+      <div class="screen-desc">Placeholder screen. Accessible from Home.</div>
+    </div>
+
+    <div class="card">
+      <div class="screen-icon">🎪</div>
+      <div class="screen-name">Live Events</div>
+      <div class="screen-path">/events</div>
+      <div class="badge gate">flag: liveEvents</div>
+      <div class="screen-desc">City event listings.</div>
+    </div>
+
+    <div class="card overlay">
+      <div class="screen-icon">📡</div>
+      <div class="screen-name">Offline Banner</div>
+      <div class="screen-path">(top of shell)</div>
+      <div class="screen-desc">Persistent connectivity watcher. Shown when offline.</div>
+    </div>
+
+    <div class="card overlay">
+      <div class="screen-icon">📢</div>
+      <div class="screen-name">Ad Banner</div>
+      <div class="screen-path">(above nav bar)</div>
+      <div class="screen-desc">AdMob 320×50. Shown on all shell tabs.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────
+     COMPLETE ROUTE TABLE
+─────────────────────────────────────────────────────────── -->
+<div class="flow-section" id="table">
+  <h2>All routes at a glance</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:#1e2433;color:#94a3b8;text-align:left;">
+        <th style="padding:10px 14px;border-bottom:1px solid #2d3748;">Route</th>
+        <th style="padding:10px 14px;border-bottom:1px solid #2d3748;">Screen</th>
+        <th style="padding:10px 14px;border-bottom:1px solid #2d3748;">Shell?</th>
+        <th style="padding:10px 14px;border-bottom:1px solid #2d3748;">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/onboarding</td><td style="padding:8px 14px;">OnboardingScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">First-run gate</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/login</td><td style="padding:8px 14px;">LoginScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Firebase Auth</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/home</td><td style="padding:8px 14px;">HomeScreen</td><td style="padding:8px 14px;">✓ tab 0</td><td style="padding:8px 14px;color:#94a3b8;"></td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/ride</td><td style="padding:8px 14px;">TripModeScreen</td><td style="padding:8px 14px;">✓ tab 1</td><td style="padding:8px 14px;color:#94a3b8;">Start/End Ride</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/play</td><td style="padding:8px 14px;">PlayHubScreen</td><td style="padding:8px 14px;">✓ tab 2</td><td style="padding:8px 14px;color:#94a3b8;"></td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/wallet</td><td style="padding:8px 14px;">WalletScreen</td><td style="padding:8px 14px;">✓ tab 3</td><td style="padding:8px 14px;color:#94a3b8;"></td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/profile</td><td style="padding:8px 14px;">ProfileScreen</td><td style="padding:8px 14px;">✓ tab 4</td><td style="padding:8px 14px;color:#94a3b8;"></td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/learn</td><td style="padding:8px 14px;">LearnHubScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Articles, Stories, Surveys</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/my-redemptions</td><td style="padding:8px 14px;">MyRedemptionsScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">From Wallet</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/notifications-inbox</td><td style="padding:8px 14px;">NotificationsInboxScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Bell icon</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/settings</td><td style="padding:8px 14px;">SettingsScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Gear icon from Home/Profile</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/game/:gameId</td><td style="padding:8px 14px;">gameScreenFor(id)</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">trivia, sudoku, word_puzzle, city_explorer, daily_spin</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/booking</td><td style="padding:8px 14px;">BookingComingSoonScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Placeholder</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/friends</td><td style="padding:8px 14px;">FriendsScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">From Play / Profile</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/referral</td><td style="padding:8px 14px;">ReferralScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">From Profile</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/journey-planner</td><td style="padding:8px 14px;">JourneyPlannerScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Feature flag: liveEtas</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/stamps</td><td style="padding:8px 14px;">StampsScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Feature flag: stamps</td></tr>
+      <tr style="background:#191d29;border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/audio</td><td style="padding:8px 14px;">AudioStoriesScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Feature flag: audioStories</td></tr>
+      <tr style="border-bottom:1px solid #1e2433;"><td style="padding:8px 14px;color:#60a5fa;font-family:monospace;">/events</td><td style="padding:8px 14px;">EventsScreen</td><td style="padding:8px 14px;">✗</td><td style="padding:8px 14px;color:#94a3b8;">Feature flag: liveEvents</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p style="text-align:center;color:#334155;font-size:12px;padding:32px;">MetroSafar · generated 2026-06-05</p>
+
+</body>
+</html>

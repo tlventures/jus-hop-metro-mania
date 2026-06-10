@@ -25,6 +25,10 @@ const { generateStationToken, validateStationToken } = require('./lib/qr-tokens'
 const { verifyAdMobSSV } = require('./lib/admob-ssv');
 const { validateTriviaScore } = require('./lib/anti-cheat');
 const {
+  gameRewardClaimKey,
+  isCommuteSessionExpired,
+} = require('./lib/commute-policy');
+const {
   installPhase56Middleware,
   installPhase56Routes,
   createPhase56Realtime,
@@ -407,6 +411,7 @@ const accountLimiter = buildLimiter('rl:account:', 5);   // account deletion
 const claimLimiter = contentLimiter;
 
 const generalLimiter = buildLimiter('rl:general:', 200);
+const GAME_DAILY_POINT_CAP = 150;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -790,13 +795,52 @@ async function getActiveCommuteSession(clientId) {
     .limit(1)
     .get();
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  const doc = snap.docs[0];
+  const session = { id: doc.id, ...doc.data() };
+  if (isCommuteSessionExpired(session)) {
+    const expiredAt = new Date().toISOString();
+    await doc.ref.set({
+      status: 'expired',
+      expiredAt,
+      updatedAt: expiredAt,
+      rewardsEligible: false,
+      multiplier: 1,
+    }, { merge: true });
+    return null;
+  }
+
+  return session;
+}
+
+function isEligibleCommuteSession(session) {
+  return Boolean(
+    session &&
+    session.status === 'active' &&
+    (
+      session.rewardsEligible === true ||
+      session.ticketVerification?.status === 'hmac_verified'
+    ),
+  );
+}
+
+async function requireEligibleCommuteSession(clientId) {
+  const session = await getActiveCommuteSession(clientId);
+  if (isEligibleCommuteSession(session)) {
+    return session;
+  }
+
+  const error = new Error('Ride Mode is required to earn points.');
+  error.statusCode = 403;
+  error.reason = 'commute_required';
+  throw error;
 }
 
 async function maybeGetCommuteMultiplier(clientId) {
   try {
     const session = await getActiveCommuteSession(clientId);
-    return session ? { multiplier: 1.5, session } : { multiplier: 1, session: null };
+    return isEligibleCommuteSession(session)
+      ? { multiplier: 1.5, session }
+      : { multiplier: 1, session: null };
   } catch (error) {
     logger.warn({ err: error, clientId }, 'Commute multiplier lookup failed');
     return { multiplier: 1, session: null };
@@ -1516,6 +1560,7 @@ app.post('/api/rewards/watch/:videoId', redeemLimiter, async (req, res, next) =>
     const video = catalog.videos.find((item) => item.id === req.params.videoId);
     if (!video) { res.status(404).json({ error: 'Video not found' }); return; }
 
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const watched = new Set(state.watchedVideoIds || []);
       let nextPoints = state.points;
@@ -1716,7 +1761,7 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
       res.status(404).json({ error: 'Game not found' }); return;
     }
 
-    const commute = await maybeGetCommuteMultiplier(req.clientId);
+    const commute = await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
       const isDailySpin = req.params.gameId === 'daily_spin';
@@ -1735,14 +1780,56 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
 
       const gameScores = state.gameScores || {};
       const current = gameScores[req.params.gameId] || { score: 0, completions: 0 };
+      const rewardClaims = state.gameRewardClaims || {};
+      const claimKey = gameRewardClaimKey(commute.id, req.params.gameId);
+      const today = istDayString(now);
+      const gamePointsToday =
+        state.gameRewardDate === today
+          ? Number(state.gamePointsEarnedToday || 0)
+          : 0;
+      if (!isDailySpin && rewardClaims[claimKey]) {
+        return {
+          next: null,
+          response: {
+            alreadyRewardedThisRide: true,
+            pointsEarned: 0,
+            totalPoints: state.points,
+            commuteMultiplier: commute.multiplier,
+            commuteSessionId: commute.id,
+            gameScore: current,
+          },
+        };
+      }
+      if (gamePointsToday >= GAME_DAILY_POINT_CAP) {
+        return {
+          next: null,
+          response: {
+            dailyGameCapReached: true,
+            pointsEarned: 0,
+            totalPoints: state.points,
+            dailyGameCap: GAME_DAILY_POINT_CAP,
+            commuteMultiplier: commute.multiplier,
+            commuteSessionId: commute.id,
+            gameScore: current,
+          },
+        };
+      }
       const newScore = Math.max(current.score, Number(req.body.score) || 0);
       const basePoints = Math.min(50, Math.max(15, Math.floor(Number(req.body.score) / 2)));
-      const pointsEarned = Math.round(basePoints * commute.multiplier);
+      const pointsEarned = Math.min(
+        Math.round(basePoints * commute.multiplier),
+        GAME_DAILY_POINT_CAP - gamePointsToday,
+      );
 
       const next = {
         ...state,
         points: state.points + pointsEarned,
         gameScores: { ...gameScores, [req.params.gameId]: { score: newScore, completions: current.completions + 1 } },
+        gameRewardClaims: isDailySpin
+          ? rewardClaims
+          : { ...rewardClaims, [claimKey]: new Date().toISOString() },
+        gameRewardDate: today,
+        gamePointsEarnedToday: gamePointsToday + pointsEarned,
         ...(isDailySpin ? { lastDailySpinAt: now.toISOString() } : {}),
       };
       return {
@@ -1791,6 +1878,7 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
 
 app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
   try {
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
       const lastClaim = state.lastStreakClaimAt ? new Date(state.lastStreakClaimAt) : null;
@@ -1830,6 +1918,7 @@ app.post('/api/quests/:questId/complete', gameLimiter, async (req, res, next) =>
   try {
     if (!QUEST_POINTS[req.params.questId]) { res.status(404).json({ error: 'Quest not found' }); return; }
 
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const completed = new Set(state.completedQuests || []);
       if (completed.has(req.params.questId)) {
@@ -1873,6 +1962,7 @@ app.get('/api/games/leaderboard', async (req, res, next) => {
 app.post('/api/scratch-cards/:cardId/scratch', contentLimiter, async (req, res, next) => {
   try {
     const cardId = req.params.cardId;
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const wins = state.scratchCardWins || [];
       const alreadyScratched = wins.some((w) => w.cardId === cardId);
@@ -1918,6 +2008,7 @@ app.post('/api/articles/:articleId/read', contentLimiter, async (req, res, next)
     const article = catalog.articles.find((a) => a.id === req.params.articleId);
     if (!article) { res.status(404).json({ error: 'Article not found' }); return; }
 
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const read = new Set(state.readArticleIds || []);
       let pointsEarned = 0;
@@ -1961,6 +2052,7 @@ app.post('/api/surveys/:surveyId/submit', contentLimiter, validate(surveySubmitS
     const survey = catalog.surveys.find((s) => s.id === req.params.surveyId);
     if (!survey) { res.status(404).json({ error: 'Survey not found' }); return; }
 
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const completed = new Set(state.completedSurveys || []);
       if (completed.has(survey.id)) {
@@ -2008,6 +2100,7 @@ app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyComplet
     const story = (staticData.stories || []).find((s) => s.id === req.params.storyId);
     if (!story) { res.status(404).json({ error: 'Story not found' }); return; }
 
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const completed = new Set(state.completedStories || []);
       let pointsEarned = 0;
@@ -2087,6 +2180,27 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
   try {
     const { type, entityId, metadata } = req.body;
     if (!ACTIVITY_POINT_RULES[type]) { res.status(400).json({ error: `Unknown activity type: ${type}` }); return; }
+    if (type === 'ride_started' || type === 'ride_completed') {
+      res.status(400).json({
+        error: 'Ride lifecycle events are managed by the verified commute session.',
+        reason: 'server_managed_ride_event',
+      });
+      return;
+    }
+
+    const commuteRequiredTypes = new Set([
+      'game_completed',
+      'quest_completed',
+      'article_read',
+      'survey_submitted',
+      'story_completed',
+      'stamp_claimed',
+      'station_quiz_completed',
+      'passport_viewed',
+    ]);
+    if (commuteRequiredTypes.has(type)) {
+      await requireEligibleCommuteSession(req.clientId);
+    }
 
     const commute = await maybeGetCommuteMultiplier(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
@@ -2283,6 +2397,7 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
 
     // Award using the same daily-cap logic as the existing watch-ad endpoint.
     const amount = Number(reward_amount) || AD_REWARD_POINTS;
+    await requireEligibleCommuteSession(user_id);
     await claimTransaction(user_id, async (txn, state) => {
       const today = new Date().toDateString();
       const isNewDay = state.adWatchDate !== today;
@@ -2321,6 +2436,7 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
 
 app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
   try {
+    await requireEligibleCommuteSession(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const today = new Date().toDateString();
       const isNewDay = state.adWatchDate !== today;
@@ -2726,7 +2842,6 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
       res.status(400).json({ error: 'Ticket verification is required before rewards can start.' });
       return;
     }
-    const desiredStatus = hasTicketVerification && (req.body.phase === 'active' || highConfidence) ? 'active' : 'detecting';
     const ref = existing
       ? firestore.collection('metrosafar_commute_sessions').doc(existing.id)
       : firestore.collection('metrosafar_commute_sessions').doc();
@@ -2761,6 +2876,11 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
         };
       }
     }
+    const rewardsEligible = Boolean(ticketVerification?.status === 'hmac_verified');
+    const desiredStatus = rewardsEligible &&
+      (req.body.phase === 'active' || highConfidence)
+      ? 'active'
+      : 'detecting';
     const payload = {
       userId: req.clientId,
       cityId,
@@ -2768,10 +2888,15 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
       confidenceScore: req.body.confidenceScore,
       vibrationScore: req.body.vibrationScore || 0,
       speedKmh: req.body.speedKmh || 0,
-      stationId: req.body.stationId || existing?.stationId || null,
-      startedAt: existing?.startedAt || req.body.detectedAt || now,
+      stationId:
+        ticketVerification?.stationId ||
+        req.body.stationId ||
+        existing?.stationId ||
+        null,
+      startedAt: existing?.startedAt || now,
       updatedAt: now,
-      multiplier: desiredStatus === 'active' ? 1.5 : 1,
+      multiplier: desiredStatus === 'active' && rewardsEligible ? 1.5 : 1,
+      rewardsEligible,
       ticketVerification,
     };
     await ref.set(payload, { merge: true });
@@ -2800,12 +2925,22 @@ app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commu
       return;
     }
     const session = snap.data();
-    const endedAt = req.body.endedAt || new Date().toISOString();
+    if (session.status !== 'active') {
+      res.json({
+        session: { id: ref.id, ...session },
+        pointsAwarded: 0,
+        alreadyEnded: true,
+      });
+      return;
+    }
+    const endedAt = new Date().toISOString();
     await ref.set({
       status: 'completed',
       endStationId: req.body.endStationId || null,
       endedAt,
       updatedAt: endedAt,
+      rewardsEligible: false,
+      multiplier: 1,
     }, { merge: true });
 
     await incrementWeeklyStats(req.clientId, {
