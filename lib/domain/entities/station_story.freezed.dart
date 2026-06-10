@@ -25,7 +25,10 @@ mixin _$StationStory {
   String get stationName => throw _privateConstructorUsedError;
   String get description => throw _privateConstructorUsedError;
   String get imageUrl => throw _privateConstructorUsedError;
-  List<StoryFrame> get frames => throw _privateConstructorUsedError;
+  List<StoryFrame> get frames =>
+      throw _privateConstructorUsedError; // Display-only; server awards a fixed `story_completed` reward (25). Default
+  // so stories without an explicit points field still parse (was `required`,
+  // which threw on the real payload and left the screen blank).
   int get points => throw _privateConstructorUsedError;
   bool get isCompleted => throw _privateConstructorUsedError;
 
@@ -216,7 +219,7 @@ class _$StationStoryImpl implements _StationStory {
     required this.description,
     required this.imageUrl,
     required final List<StoryFrame> frames,
-    required this.points,
+    this.points = 25,
     this.isCompleted = false,
   }) : _frames = frames;
 
@@ -239,7 +242,11 @@ class _$StationStoryImpl implements _StationStory {
     return EqualUnmodifiableListView(_frames);
   }
 
+  // Display-only; server awards a fixed `story_completed` reward (25). Default
+  // so stories without an explicit points field still parse (was `required`,
+  // which threw on the real payload and left the screen blank).
   @override
+  @JsonKey()
   final int points;
   @override
   @JsonKey()
@@ -302,7 +309,7 @@ abstract class _StationStory implements StationStory {
     required final String description,
     required final String imageUrl,
     required final List<StoryFrame> frames,
-    required final int points,
+    final int points,
     final bool isCompleted,
   }) = _$StationStoryImpl;
 
@@ -318,7 +325,9 @@ abstract class _StationStory implements StationStory {
   @override
   String get imageUrl;
   @override
-  List<StoryFrame> get frames;
+  List<StoryFrame> get frames; // Display-only; server awards a fixed `story_completed` reward (25). Default
+  // so stories without an explicit points field still parse (was `required`,
+  // which threw on the real payload and left the screen blank).
   @override
   int get points;
   @override

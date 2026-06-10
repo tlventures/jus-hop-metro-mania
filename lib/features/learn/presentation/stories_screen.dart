@@ -13,12 +13,15 @@ class StoriesScreen extends ConsumerStatefulWidget {
 }
 
 class _StoriesScreenState extends ConsumerState<StoriesScreen> {
+  bool _loading = true;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(storiesProvider.notifier).fetchStories(),
-    );
+    Future.microtask(() async {
+      await ref.read(storiesProvider.notifier).fetchStories();
+      if (mounted) setState(() => _loading = false);
+    });
   }
 
   @override
@@ -39,9 +42,33 @@ class _StoriesScreenState extends ConsumerState<StoriesScreen> {
         backgroundColor: colorScheme.surface,
         elevation: 0,
       ),
-      body: stories.isEmpty
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : stories.isEmpty
           ? Center(
-              child: CircularProgressIndicator(),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.s8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('📚', style: AppTypography.displayLarge),
+                    const SizedBox(height: AppSpacing.s4),
+                    Text(
+                      'No stories yet for your city',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.titleMedium
+                          .copyWith(color: colorScheme.onSurface),
+                    ),
+                    const SizedBox(height: AppSpacing.s2),
+                    Text(
+                      'Station stories are coming soon — check back later.',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodyMedium
+                          .copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
             )
           : CustomScrollView(
               slivers: [
