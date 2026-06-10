@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/backend_service.dart';
 
@@ -134,9 +135,8 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
       );
       if (trip != null) _startTimers(trip['id'] as String? ?? '');
 
-      // Award ride-started activity event and complete daily quest
-      await _backendService.logActivityEvent(type: 'ride_started');
-      try { await _backendService.completeQuest('ride_started'); } catch (_) {}
+      // Complete the daily quest (quest system is separate from points)
+      try { await _backendService.completeQuest('start_ride'); } catch (_) {}
     } catch (error) {
       debugPrint('TripModeNotifier.startManualTrip error: $error');
       state = state.copyWith(isLoading: false, statusMessage: 'Could not start trip.');
@@ -155,24 +155,22 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
         tripId: trip['id'] as String,
         endStationId: endStationId,
       );
-      // Award ride-completed event
-      final result = await _backendService.logActivityEvent(type: 'ride_completed');
-      final pts = (result['pointsAwarded'] as num?)?.toInt() ?? 0;
-      final capReached = result['dailyCapReached'] == true ||
-          result['reason'] == 'daily_cap_reached';
+      // Points come from endTrip directly — no separate ride_completed event needed
+      final pts = (data['pointsAwarded'] as num?)?.toInt() ?? 0;
       final outboxCount = await _backendService.outboxCount();
 
       final String message;
       if (data['queued'] == true) {
         message = 'Trip end saved offline — will sync automatically.';
-      } else if (capReached) {
-        final cap = (result['dailyCap'] as num?)?.toInt() ?? 500;
-        message =
-            'Trip complete! You\'ve hit today\'s $cap-point limit — rides still '
-            'count, and points reset tomorrow.';
       } else {
-        message =
-            'Trip complete! +${state.pointsEarnedThisRide + pts} pts earned this ride.';
+        final reason = data['reason'] as String?;
+        if (reason == 'daily_cap_reached') {
+          message = 'Trip complete! You\'ve hit today\'s 500-point limit — points reset tomorrow.';
+        } else if (pts == 0 && reason != null) {
+          message = 'Trip complete! (No points: $reason)';
+        } else {
+          message = 'Trip complete! +${state.pointsEarnedThisRide + pts} pts earned this ride.';
+        }
       }
 
       state = state.copyWith(
@@ -202,12 +200,25 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
     });
 
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (tripId.isNotEmpty) {
-        _backendService.sendTripHeartbeat(tripId).catchError((e) {
-          debugPrint('heartbeat error: $e');
-          return <String, dynamic>{};
-        });
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      if (tripId.isEmpty) return;
+      try {
+        // Try to send real GPS; fall back to clientTimeMs-only on error.
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+        ).timeout(const Duration(seconds: 6));
+        final speedKmh = position.speed > 0 ? position.speed * 3.6 : 0.0;
+        await _backendService.sendRideHeartbeat(
+          tripId,
+          lat: position.latitude,
+          lng: position.longitude,
+          speedKmh: speedKmh,
+          accuracy: position.accuracy,
+        );
+      } catch (e) {
+        debugPrint('heartbeat error (no GPS): $e');
+        // Still send clientTimeMs-only heartbeat so the server knows we're alive.
+        _backendService.sendTripHeartbeat(tripId).catchError((_) => <String, dynamic>{});
       }
     });
   }

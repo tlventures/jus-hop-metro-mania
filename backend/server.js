@@ -23,6 +23,7 @@ const {
 } = require('./lib/leaderboard');
 const { generateStationToken, validateStationToken } = require('./lib/qr-tokens');
 const { verifyAdMobSSV } = require('./lib/admob-ssv');
+const { installRideRoutes, getRideMultiplier } = require('./rides');
 const {
   installPhase56Middleware,
   installPhase56Routes,
@@ -766,6 +767,8 @@ async function incrementWeeklyStats(clientId, deltas, options = {}) {
   ]);
 }
 
+const COMMUTE_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 h
+
 async function getActiveCommuteSession(clientId) {
   const snap = await firestore.collection('metrosafar_commute_sessions')
     .where('userId', '==', clientId)
@@ -774,11 +777,25 @@ async function getActiveCommuteSession(clientId) {
     .limit(1)
     .get();
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  const doc = snap.docs[0];
+  const data = doc.data();
+  // Lazy TTL: expire sessions that haven't been updated within the TTL window
+  const updatedAt = new Date(data.updatedAt || data.startedAt || 0).getTime();
+  if (Date.now() - updatedAt > COMMUTE_SESSION_TTL_MS) {
+    await doc.ref.set({ status: 'expired', expiredAt: new Date().toISOString() }, { merge: true });
+    return null;
+  }
+  return { id: doc.id, ...data };
 }
 
 async function maybeGetCommuteMultiplier(clientId) {
   try {
+    // New ride system takes precedence over legacy commute sessions.
+    const rideResult = await getRideMultiplier(firestore, clientId);
+    if (rideResult.multiplier > 1) {
+      return { multiplier: rideResult.multiplier, session: rideResult.ride };
+    }
+    // Fall back to legacy commute session during transition period.
     const session = await getActiveCommuteSession(clientId);
     return session ? { multiplier: 1.5, session } : { multiplier: 1, session: null };
   } catch (error) {
@@ -1212,6 +1229,10 @@ const phase56Context = {
   getUserState,
   saveUserState,
   logger,
+  claimTransaction,
+  incrementWeeklyStats,
+  qualifyReferralForUser,
+  checkRideCadenceAnomaly,
 };
 
 installPhase56Middleware(app, phase56Context);
@@ -1258,14 +1279,16 @@ app.get('/api/home', async (req, res, next) => {
     const userState = await getUserState(req.clientId, req.firebaseUser);
     const payload = getHomePayload(userState);
 
-    // Reset completed quests at day boundary (fire-and-forget, non-blocking)
+    // Reset completed quests at day boundary — transactional, field-level only
+    // so concurrent point awards cannot be overwritten.
     const { needsReset } = buildQuestsForState(userState);
     if (needsReset) {
-      saveUserState(req.clientId, {
-        ...userState,
-        completedQuests: [],
-        lastQuestResetAt: new Date().toISOString(),
-      }).catch(err => logger.warn({ err }, '/api/home quest-reset write failed'));
+      claimTransaction(req.clientId, async (_txn, state) => {
+        const { needsReset: stillNeeds } = buildQuestsForState(state);
+        if (!stillNeeds) return { next: null, response: null };
+        const next = { ...state, completedQuests: [], lastQuestResetAt: new Date().toISOString() };
+        return { next, response: null };
+      }).catch(err => logger.warn({ err }, '/api/home quest-reset transaction failed'));
     }
 
     res.json(payload);
@@ -1664,6 +1687,19 @@ app.get('/api/legal/privacy-policy', (_req, res) => res.json(staticData.legal.pr
 app.get('/api/legal/terms', (_req, res) => res.json(staticData.legal.terms));
 app.get('/api/support', (_req, res) => res.json(staticData.support));
 
+// Fixed point schedule — independent of client-submitted score.
+const GAME_BASE_POINTS = {
+  daily_spin:    20,
+  trivia:        25,
+  sudoku:        20,
+  word_puzzle:   20,
+  city_explorer: 20,
+};
+// Max rewarded plays per game per IST day (unlimited fun, capped earnings).
+const GAME_REWARDED_PLAYS_PER_DAY = 3;
+// Points awarded when playing outside a fresh ride session.
+const GAME_POINTS_OUTSIDE_TRANSIT = 5;
+
 app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema), async (req, res, next) => {
   try {
     const validGames = ['daily_spin', 'trivia', 'sudoku', 'word_puzzle', 'city_explorer'];
@@ -1672,55 +1708,77 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
     }
 
     const commute = await maybeGetCommuteMultiplier(req.clientId);
+    const inTransit = commute.multiplier > 1;
+
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
+      const todayIst = istDayString(now);
       const isDailySpin = req.params.gameId === 'daily_spin';
-      const lastDailySpinAt = state.lastDailySpinAt ? new Date(state.lastDailySpinAt) : null;
-      if (isDailySpin && lastDailySpinAt?.toDateString() === now.toDateString()) {
-        return {
-          next: null,
-          response: {
-            alreadyPlayedToday: true,
-            pointsEarned: 0,
-            totalPoints: state.points,
-            gameScore: state.gameScores?.daily_spin || { score: 0, completions: 0 },
-          },
-        };
+
+      // Daily spin: one per IST day
+      if (isDailySpin) {
+        const lastDailySpinAt = state.lastDailySpinAt ? new Date(state.lastDailySpinAt) : null;
+        if (lastDailySpinAt && istDayString(lastDailySpinAt) === todayIst) {
+          return { next: null, response: { alreadyPlayedToday: true, pointsEarned: 0, totalPoints: state.points, gameScore: state.gameScores?.daily_spin || { score: 0, completions: 0 } } };
+        }
       }
 
+      // Per-game daily play cap (tracks rewarded plays per IST day)
+      const gameDailyPlays = (state.gameDailyPlays?.day === todayIst)
+        ? state.gameDailyPlays
+        : { day: todayIst, counts: {} };
+      const playedToday = gameDailyPlays.counts[req.params.gameId] || 0;
+      const capReached = !isDailySpin && playedToday >= GAME_REWARDED_PLAYS_PER_DAY;
+
+      // Route through the 500/day cap
+      const isNewDay = !state.lastDailyEarnDate || new Date(state.lastDailyEarnDate).toDateString() !== now.toDateString();
+      const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
+      const dailyCapReached = currentDailyEarned >= DAILY_POINT_CAP;
+
+      // Score is stored for leaderboards but does not determine points
       const gameScores = state.gameScores || {};
       const current = gameScores[req.params.gameId] || { score: 0, completions: 0 };
       const newScore = Math.max(current.score, Number(req.body.score) || 0);
-      const basePoints = Math.min(50, Math.max(15, Math.floor(Number(req.body.score) / 2)));
-      const pointsEarned = Math.round(basePoints * commute.multiplier);
+
+      let pointsEarned = 0;
+      let reason = null;
+      if (capReached) {
+        reason = 'daily_game_cap';
+      } else if (dailyCapReached) {
+        reason = 'daily_cap_reached';
+      } else {
+        const base = inTransit ? GAME_BASE_POINTS[req.params.gameId] : GAME_POINTS_OUTSIDE_TRANSIT;
+        pointsEarned = Math.round(base * commute.multiplier);
+        pointsEarned = Math.min(pointsEarned, DAILY_POINT_CAP - currentDailyEarned);
+      }
 
       const next = {
         ...state,
         points: state.points + pointsEarned,
+        dailyPointsEarned: currentDailyEarned + pointsEarned,
+        lastDailyEarnDate: pointsEarned > 0 ? now.toISOString() : state.lastDailyEarnDate,
         gameScores: { ...gameScores, [req.params.gameId]: { score: newScore, completions: current.completions + 1 } },
+        gameDailyPlays: { day: todayIst, counts: { ...gameDailyPlays.counts, [req.params.gameId]: playedToday + 1 } },
         ...(isDailySpin ? { lastDailySpinAt: now.toISOString() } : {}),
       };
       return {
         next,
         response: {
           pointsEarned,
+          reason,
           totalPoints: next.points,
+          inTransit,
           commuteMultiplier: commute.multiplier,
           commuteSessionId: commute.session?.id || null,
           gameScore: next.gameScores[req.params.gameId],
+          playsRemainingToday: isDailySpin ? 0 : Math.max(0, GAME_REWARDED_PLAYS_PER_DAY - (playedToday + 1)),
         },
       };
     });
 
     if (!response.alreadyPlayedToday && response.pointsEarned > 0) {
       try {
-        await incrementWeeklyStats(req.clientId, {
-          gamesPlayed: 1,
-          pointsEarned: response.pointsEarned,
-        }, { cityId: req.body.cityId });
-        // Referral qualification intentionally NOT triggered here.
-        // Points only release after a verified physical trip (ride_completed /
-        // commute-session end) to prevent empty-account fraud.
+        await incrementWeeklyStats(req.clientId, { gamesPlayed: 1, pointsEarned: response.pointsEarned }, { cityId: req.body.cityId });
       } catch (error) {
         logger.warn({ err: error, clientId: req.clientId }, 'Post-game retention hooks failed');
       }
@@ -1760,9 +1818,29 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
       const continuing = lastIst != null && istDayDiff(lastIst, todayIst) === 1;
       const newDay = continuing ? (state.streakDay || 0) + 1 : 1;
       const newLongest = Math.max(state.longestStreak || 0, newDay);
-      const pointsEarned = 5 * newDay;
-      const next = { ...state, points: state.points + pointsEarned, streakDay: newDay, longestStreak: newLongest, lastStreakClaimAt: now.toISOString() };
-      return { next, response: { streakDay: newDay, longestStreak: newLongest, pointsEarned, totalPoints: next.points, reset: !continuing } };
+
+      // Streak always advances for calendar purposes; points require a ride that day.
+      const lastRideAt = state.lastRideCompletedAt ? istDayString(new Date(state.lastRideCompletedAt)) : null;
+      const hadRideToday = lastRideAt === todayIst;
+      const pointsEarned = hadRideToday ? 5 * newDay : 0;
+      const next = {
+        ...state,
+        points: state.points + pointsEarned,
+        streakDay: newDay,
+        longestStreak: newLongest,
+        lastStreakClaimAt: now.toISOString(),
+      };
+      return {
+        next,
+        response: {
+          streakDay: newDay,
+          longestStreak: newLongest,
+          pointsEarned,
+          reason: hadRideToday ? null : 'no_ride_today',
+          totalPoints: next.points,
+          reset: !continuing,
+        },
+      };
     });
 
     res.json(response);
@@ -1805,17 +1883,37 @@ app.post('/api/quests/:questId/complete', gameLimiter, async (req, res, next) =>
 
 app.get('/api/games/leaderboard', async (req, res, next) => {
   try {
-    const period = req.query.period || 'week';
-    const mockLeaderboard = [
-      { rank: 1, name: 'Pro Player', score: 2450, tier: 'Platinum' },
-      { rank: 2, name: 'City Explorer', score: 2100, tier: 'Gold' },
-      { rank: 3, name: 'Word Master', score: 1950, tier: 'Gold' },
-      { rank: 4, name: 'Trivia King', score: 1800, tier: 'Silver' },
-      { rank: 5, name: 'Puzzle Solver', score: 1650, tier: 'Silver' },
-    ];
-    const userState = await getUserState(req.clientId);
+    const weekId = getIstWeekId();
+    const TOP_N_GAMES = 10;
+    const leaderboardRef = firestore.collection('metrosafar_weekly_leaderboards').doc(weekId).collection('users');
+
+    const [topSnap, userState] = await Promise.all([
+      leaderboardRef.orderBy('pointsEarned', 'desc').limit(TOP_N_GAMES).get(),
+      getUserState(req.clientId),
+    ]);
+
+    const topPlayers = topSnap.docs.map((doc, i) => ({
+      rank: i + 1,
+      name: doc.data().name || 'Metro Member',
+      score: doc.data().pointsEarned || 0,
+      tier: getTier(doc.data().pointsEarned || 0),
+    }));
+
     const totalScore = Object.values(userState.gameScores || {}).reduce((sum, g) => sum + (g.score || 0), 0);
-    res.json({ period, topPlayers: mockLeaderboard, yourScore: totalScore, yourRank: Math.floor(Math.random() * 10) + 1 });
+
+    // Real rank via count aggregation against weekly leaderboard
+    let yourRank = null;
+    try {
+      const myWeekDoc = await firestore.collection('metrosafar_user_weekly_stats')
+        .doc(req.clientId).collection('weeks').doc(weekId).get();
+      const myWeeklyPts = myWeekDoc.exists ? (myWeekDoc.data().pointsEarned || 0) : 0;
+      const countSnap = await leaderboardRef.where('pointsEarned', '>', myWeeklyPts).count().get();
+      yourRank = countSnap.data().count + 1;
+    } catch {
+      yourRank = null;
+    }
+
+    res.json({ period: 'week', weekId, topPlayers, yourScore: totalScore, yourRank });
   } catch (error) {
     next(error);
   }
@@ -1988,14 +2086,14 @@ app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyComplet
 // Activity events — unified earning pipeline with daily cap (transactional)
 // ---------------------------------------------------------------------------
 
+// ride_started / ride_completed removed — points are awarded inside endRide (rides.js)
+// to prevent the double-award pattern. These types are no longer accepted here.
 const ACTIVITY_POINT_RULES = {
   game_completed:         { base: 20, max: 50 },
   quest_completed:        { base: 20, max: 30 },
   article_read:           { base: 15, max: 15 },
   survey_submitted:       { base: 20, max: 20 },
   story_completed:        { base: 25, max: 25 },
-  ride_started:           { base: 30, max: 30 },
-  ride_completed:         { base: 20, max: 20 },
   stamp_claimed:          { base: 10, max: 15 },
   station_quiz_completed: { base: 25, max: 25 },
   passport_viewed:        { base: 10, max: 10 },
@@ -2010,8 +2108,6 @@ function activityDescription(type, entityId) {
     article_read: 'Read article',
     survey_submitted: 'Survey completed',
     story_completed: 'Station story completed',
-    ride_started: 'Started metro ride',
-    ride_completed: 'Completed metro ride',
     stamp_claimed: `Stamp: ${entityId || 'station'}`,
     station_quiz_completed: 'Station quiz answered',
     passport_viewed: 'Checked passport',
@@ -2025,10 +2121,12 @@ app.get('/api/quests/today', async (req, res, next) => {
     const { quests, needsReset } = buildQuestsForState(userState);
 
     if (needsReset) {
-      await saveUserState(req.clientId, {
-        ...userState,
-        completedQuests: [],
-        lastQuestResetAt: new Date().toISOString(),
+      // Transactional, field-level reset — cannot overwrite concurrent point awards.
+      await claimTransaction(req.clientId, async (_txn, state) => {
+        const { needsReset: stillNeeds } = buildQuestsForState(state);
+        if (!stillNeeds) return { next: null, response: null };
+        const next = { ...state, completedQuests: [], lastQuestResetAt: new Date().toISOString() };
+        return { next, response: null };
       });
     }
 
@@ -2072,10 +2170,6 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
         dailyPointsEarned: currentDailyEarned + pointsAwarded,
         lastDailyEarnDate: new Date().toISOString(),
         walletTransactions: transactions,
-        // Lifetime ride counter drives the CO₂ estimate.
-        ...(type === 'ride_completed'
-            ? { ridesCompleted: (state.ridesCompleted || 0) + 1 }
-            : {}),
       };
       return {
         next,
@@ -2097,15 +2191,7 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
         if (type === 'article_read') deltas.articlesRead = 1;
         if (type === 'survey_submitted') deltas.surveysCompleted = 1;
         if (type === 'story_completed') deltas.storiesRead = 1;
-        if (type === 'ride_completed') deltas.tripsCompleted = 1;
         await incrementWeeklyStats(req.clientId, deltas);
-        if (type === 'ride_completed') {
-          const referral = await qualifyReferralForUser(req.clientId, 'first_trip');
-          if (referral) response.referral = referral;
-          // Velocity anomaly check: flag if the user submits ride_completed
-          // events faster than physically possible (>1 per 3 minutes).
-          await checkRideCadenceAnomaly(req.clientId).catch(() => {});
-        }
       } catch (error) {
         logger.warn({ err: error, clientId: req.clientId }, 'Activity retention hooks failed');
       }
@@ -2271,10 +2357,13 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
 });
 
 // POST /api/rewards/watch-ad — legacy client-callback path.
-// Still used as fallback while SSV is being verified in production.
-// Daily cap prevents abuse; will be deprecated once SSV is confirmed stable.
+// Disabled by default now that AdMob SSV is the primary path. Enable only
+// during SSV debugging by setting LEGACY_WATCH_AD=on.
 
 app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
+  if (process.env.LEGACY_WATCH_AD !== 'on') {
+    return res.status(410).json({ error: 'Endpoint retired — rewards are now credited via AdMob SSV.' });
+  }
   try {
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const today = new Date().toDateString();
@@ -2724,8 +2813,9 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
       vibrationScore: req.body.vibrationScore || 0,
       speedKmh: req.body.speedKmh || 0,
       stationId: req.body.stationId || existing?.stationId || null,
-      startedAt: existing?.startedAt || req.body.detectedAt || now,
+      startedAt: existing?.startedAt || now,
       updatedAt: now,
+      expiresAt: existing?.expiresAt || new Date(Date.now() + COMMUTE_SESSION_TTL_MS).toISOString(),
       multiplier: desiredStatus === 'active' ? 1.5 : 1,
       ticketVerification,
     };
@@ -2785,6 +2875,7 @@ app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commu
 });
 
 installPhase56Routes(app, phase56Context);
+installRideRoutes(app, phase56Context);
 
 // ===========================================================================
 // ADMIN AUTH MIDDLEWARE

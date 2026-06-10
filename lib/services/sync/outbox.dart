@@ -70,7 +70,10 @@ class PendingMutation {
 
 class Outbox {
   static const String _storageKey = 'phase56_outbox';
-  static const int _maxEntries = 1000;
+  static const int _maxEntries = 200;
+  static const int maxRetries = 5; // public so flushOutbox can reference it
+  static const int _maxRetries = maxRetries;
+  static const Duration _maxAge = Duration(hours: 24);
 
   Future<List<PendingMutation>> all() async {
     final prefs = await SharedPreferences.getInstance();
@@ -115,4 +118,16 @@ class Outbox {
   }
 
   Future<int> count() async => (await all()).length;
+
+  /// Discard entries that have exceeded retry or age limits.
+  Future<void> pruneExpired() async {
+    final now = DateTime.now();
+    final current = await all();
+    final valid = current.where((m) {
+      if (m.retryCount >= _maxRetries) return false;
+      if (now.difference(m.createdAt) > _maxAge) return false;
+      return true;
+    }).toList();
+    if (valid.length != current.length) await replaceAll(valid);
+  }
 }

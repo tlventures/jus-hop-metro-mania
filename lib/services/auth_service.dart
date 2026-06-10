@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:metrosafar/services/sync/outbox.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -32,6 +34,19 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final uid = _auth.currentUser?.uid;
+    // Clear all UID-scoped caches and the offline outbox before sign-out so the
+    // next signed-in user cannot see the previous user's cached data.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (uid != null) {
+        final keys = prefs.getKeys().where((k) => k.startsWith('${uid}_')).toList();
+        for (final k in keys) await prefs.remove(k);
+      }
+      await Outbox().replaceAll([]); // queued mutations carry the old user's auth headers
+    } catch (e) {
+      debugPrint('AuthService: cache clear error on sign-out: $e');
+    }
     await _auth.signOut();
     debugPrint('AuthService: signed out');
   }

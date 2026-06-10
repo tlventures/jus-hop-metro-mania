@@ -60,32 +60,17 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
     String? cityId,
     required RideVerification ticketVerification,
   }) async {
-    state = state.copyWith(
-      phase: CommutePhase.active,
-      confidenceScore: 1,
-      vibrationScore: state.vibrationScore,
-      startedAt: DateTime.now(),
-    );
-    await _openBackendSession(
-      cityId: cityId,
-      phase: 'active',
-      ticketVerification: ticketVerification,
-    );
+    // Show verifying spinner before touching the backend.
+    state = state.copyWith(phase: CommutePhase.verifying, confidenceScore: 1);
+    await _openBackendSession(cityId: cityId, phase: 'active', ticketVerification: ticketVerification);
   }
 
   Future<void> acceptDetected({
     String? cityId,
     required RideVerification ticketVerification,
   }) async {
-    state = state.copyWith(
-      phase: CommutePhase.active,
-      startedAt: DateTime.now(),
-    );
-    await _openBackendSession(
-      cityId: cityId,
-      phase: 'active',
-      ticketVerification: ticketVerification,
-    );
+    state = state.copyWith(phase: CommutePhase.verifying);
+    await _openBackendSession(cityId: cityId, phase: 'active', ticketVerification: ticketVerification);
   }
 
   Future<void> _openBackendSession({
@@ -104,10 +89,30 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
         ticketVerification: ticketVerification,
       );
       final session = data['session'] as Map<String, dynamic>?;
-      state = state.copyWith(sessionId: session?['id'] as String?);
+      final sessionId = session?['id'] as String?;
+      final confirmed = data['confirmed'] == true;
+
+      if (confirmed && sessionId != null) {
+        // Backend confirmed — now safe to show as active.
+        state = state.copyWith(
+          phase: CommutePhase.active,
+          sessionId: sessionId,
+          startedAt: DateTime.now(),
+        );
+      } else {
+        // Backend rejected or returned no session — roll back to detecting.
+        state = state.copyWith(
+          phase: CommutePhase.detecting,
+          error: 'Could not verify your ride. Please rescan the station QR.',
+        );
+      }
     } catch (error) {
       debugPrint('Commute session open failed: $error');
-      state = state.copyWith(error: error.toString());
+      // Any exception (4xx, network) rolls back to detecting with an error message.
+      state = state.copyWith(
+        phase: CommutePhase.detecting,
+        error: error.toString(),
+      );
     }
   }
 

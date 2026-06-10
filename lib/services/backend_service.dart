@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,17 @@ import 'package:metrosafar/config/api_config.dart';
 import 'package:metrosafar/core/commute/ride_verification.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/sync/outbox.dart';
+
+/// Thrown when the server responds with a 4xx status code.
+/// These should NOT be queued for offline retry — the server has spoken.
+class BackendHttpException implements Exception {
+  final int statusCode;
+  final String body;
+  const BackendHttpException(this.statusCode, this.body);
+
+  @override
+  String toString() => 'HTTP $statusCode: $body';
+}
 
 class BackendAuthException implements Exception {
   final String message;
@@ -689,10 +701,67 @@ class BackendService {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // New server-authoritative ride session (Phase 1)
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> startRide({required String qrToken, String? cityId}) {
+    return _sendJson(
+      'POST',
+      '/api/rides/start',
+      body: {
+        'qrToken': qrToken,
+        if (cityId != null) 'cityId': cityId,
+      },
+    );
+  }
+
+  /// Send a GPS heartbeat for the active ride.
+  /// Returns empty map on failure — never queued offline (best-effort).
+  Future<Map<String, dynamic>> sendRideHeartbeat(
+    String rideId, {
+    required double lat,
+    required double lng,
+    required double speedKmh,
+    double? accuracy,
+    bool mockLocation = false,
+  }) async {
+    try {
+      return await _sendJson(
+        'POST',
+        '/api/rides/$rideId/heartbeat',
+        body: {
+          'lat': lat,
+          'lng': lng,
+          'speedKmh': speedKmh,
+          if (accuracy != null) 'accuracy': accuracy,
+          'mockLocation': mockLocation,
+        },
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> endRide(String rideId, {String? endStationId}) {
+    return _sendJson(
+      'POST',
+      '/api/rides/$rideId/end',
+      body: {
+        if (endStationId != null) 'endStationId': endStationId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getActiveRide() {
+    return _getMap('/api/rides/active', cacheKey: 'cache_active_ride');
+  }
+
   Future<int> outboxCount() => Outbox().count();
 
   Future<void> flushOutbox() async {
     final outbox = Outbox();
+    await outbox.pruneExpired(); // drop timed-out entries before attempting sync
     final pending = await outbox.all();
     final failures = <PendingMutation>[];
 
@@ -707,21 +776,37 @@ class BackendService {
             .send(request)
             .timeout(const Duration(seconds: 12));
         final response = await http.Response.fromStream(streamed);
+
+        if (response.statusCode == 409) {
+          // Idempotent conflict — already processed, treat as success.
+          continue;
+        }
+        if (response.statusCode >= 400 && response.statusCode < 500) {
+          // 4xx = the server permanently rejected this request. Drop it — retrying
+          // will never succeed. Show nothing (it was already "saved offline").
+          debugPrint('Outbox: dropping ${mutation.path} — server returned ${response.statusCode}');
+          continue;
+        }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          failures.add(
-            mutation.copyWith(
-              retryCount: mutation.retryCount + 1,
-              lastError: response.body,
-            ),
+          // 5xx or unexpected — back off and retry later
+          final updated = mutation.copyWith(
+            retryCount: mutation.retryCount + 1,
+            lastError: response.body,
           );
+          if (updated.retryCount < Outbox.maxRetries) failures.add(updated);
         }
       } catch (error) {
-        failures.add(
-          mutation.copyWith(
+        final isNetworkError = error is SocketException ||
+            error is TimeoutException ||
+            error is http.ClientException;
+        if (isNetworkError) {
+          final updated = mutation.copyWith(
             retryCount: mutation.retryCount + 1,
             lastError: error.toString(),
-          ),
-        );
+          );
+          if (updated.retryCount < Outbox.maxRetries) failures.add(updated);
+        }
+        // Non-network errors (e.g. encoding problems) — drop silently.
       }
     }
 
@@ -733,6 +818,8 @@ class BackendService {
     required String cacheKey,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anon';
+    final scopedKey = '${uid}_$cacheKey';
     final headers = await _headers();
 
     try {
@@ -740,7 +827,7 @@ class BackendService {
           .get(_uri(path), headers: headers)
           .timeout(const Duration(seconds: 12));
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        await prefs.setString(cacheKey, response.body);
+        await prefs.setString(scopedKey, response.body);
         return Map<String, dynamic>.from(
           jsonDecode(response.body) as Map<String, dynamic>,
         );
@@ -749,17 +836,15 @@ class BackendService {
         throw const BackendAuthException();
       }
       if (response.statusCode == 429) {
-        throw BackendRateLimitException(
-          retryAfterSeconds: _retryAfter(response),
-        );
+        throw BackendRateLimitException(retryAfterSeconds: _retryAfter(response));
       }
-      throw Exception('Request failed with ${response.statusCode}');
+      throw BackendHttpException(response.statusCode, response.body);
     } on BackendAuthException {
       rethrow;
     } on BackendRateLimitException {
       rethrow;
     } catch (_) {
-      final cached = prefs.getString(cacheKey);
+      final cached = prefs.getString(scopedKey);
       if (cached != null) {
         return Map<String, dynamic>.from(
           jsonDecode(cached) as Map<String, dynamic>,
@@ -793,19 +878,22 @@ class BackendService {
         throw const BackendAuthException();
       }
       if (response.statusCode == 429) {
-        throw BackendRateLimitException(
-          retryAfterSeconds: _retryAfter(response),
-        );
+        throw BackendRateLimitException(retryAfterSeconds: _retryAfter(response));
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
+        // Surface server-side errors directly — do NOT queue 4xx for offline retry.
+        throw BackendHttpException(
+          response.statusCode,
           response.body.isNotEmpty ? response.body : 'Request failed',
         );
       }
 
       final prefs = await SharedPreferences.getInstance();
       if (response.body.isNotEmpty) {
-        if (cacheKey != null) await prefs.setString(cacheKey, response.body);
+        if (cacheKey != null) {
+          final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anon';
+          await prefs.setString('${uid}_$cacheKey', response.body);
+        }
         return Map<String, dynamic>.from(
           jsonDecode(response.body) as Map<String, dynamic>,
         );
@@ -813,10 +901,12 @@ class BackendService {
 
       return {};
     } catch (error) {
-      // Don't queue auth or rate-limit failures — only genuine connectivity ones.
-      if (queueOffline &&
-          error is! BackendAuthException &&
-          error is! BackendRateLimitException) {
+      // Only queue genuine connectivity failures (network down, timeout).
+      // 4xx / 401 / 429 are not retryable via the outbox.
+      final isNetworkError = error is SocketException ||
+          error is TimeoutException ||
+          error is http.ClientException;
+      if (queueOffline && isNetworkError) {
         await Outbox().enqueue(
           PendingMutation(
             id: idempotencyKey,

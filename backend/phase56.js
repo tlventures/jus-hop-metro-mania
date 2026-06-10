@@ -260,7 +260,7 @@ async function startTrip(context, clientId, body = {}) {
   const history = await getTripHistory(context.firestore, clientId);
   const inference = inferTrip(context.stations, startStation, body.line, history);
   const tripId = crypto.randomUUID();
-  const createdAt = body.detectedAt || nowIso();
+  const createdAt = nowIso(); // server time only — ignore client detectedAt to prevent expiry bypass
   const trip = {
     id: tripId,
     userId: clientId,
@@ -320,11 +320,19 @@ async function updateTripHeartbeat(context, clientId, tripId, body = {}) {
     };
   }
 
+  // Tag beats with missing/zero GPS as implausible so endTrip won't count them
+  // as evidence. Old Flutter clients only send clientTimeMs, so lat/lng/speed
+  // will be zero — those beats must not unlock points.
+  const lat = Number(body.lat || 0);
+  const lng = Number(body.lng || 0);
+  const speedKmh = Number(body.speedKmh || 0);
+  const hasGps = lat !== 0 || lng !== 0;
   const heartbeat = {
-    lat: Number(body.lat || 0),
-    lng: Number(body.lng || 0),
-    speedKmh: Number(body.speedKmh || 0),
-    timestamp: body.timestamp || nowIso(),
+    lat,
+    lng,
+    speedKmh,
+    serverAt: nowIso(),
+    implausible: !hasGps,
   };
   const heartbeats = [...(trip.heartbeats || []), heartbeat].slice(-30);
   const remainingSeconds = Math.max(
@@ -332,7 +340,10 @@ async function updateTripHeartbeat(context, clientId, tripId, body = {}) {
     Math.floor((new Date(trip.predictedEndAt).getTime() - Date.now()) / 1000),
   );
 
-  await ref.set({ heartbeats, lastHeartbeatAt: nowIso() }, { merge: true });
+  // Only update lastHeartbeatAt for real GPS beats
+  const update = { heartbeats };
+  if (hasGps) update.lastHeartbeatAt = nowIso();
+  await ref.set(update, { merge: true });
   return {
     predictedEndStationId: trip.predictedEndStationId,
     remainingSeconds,
@@ -375,8 +386,9 @@ async function endTrip(context, clientId, tripId, body = {}) {
     throw error;
   }
 
-  // Validate: require at least one heartbeat to earn points.
-  const hasHeartbeats = Array.isArray(trip.heartbeats) && trip.heartbeats.length > 0;
+  // Require at least one plausible (real GPS) heartbeat to earn points.
+  const hasHeartbeats = Array.isArray(trip.heartbeats) &&
+    trip.heartbeats.some((b) => !b.implausible);
 
   const endStation = findStation(context.stations, body.endStationId) ||
     findStation(context.stations, trip.predictedEndStationId) ||
@@ -400,7 +412,7 @@ async function endTrip(context, clientId, tripId, body = {}) {
       }
     : null;
 
-  const completedAt = body.endedAt || nowIso();
+  const completedAt = nowIso(); // server time only — ignore client endedAt to prevent expiry bypass
   await ref.set({
     endStation: endStation ? { id: endStation.id, name: endStation.name, claimedAt: completedAt } : null,
     status: 'completed',
@@ -750,35 +762,49 @@ function installPhase56Middleware(app, context) {
       return;
     }
 
-    const docId = hashId(`${req.clientId}:${key}`);
+    // Bind idempotency key to this specific endpoint (method + path) so a key
+    // from one endpoint cannot replay a different endpoint's response.
+    const docId = hashId(`${req.clientId}:${req.method}:${req.path}:${key}`);
     const ref = context.firestore.collection('metrosafar_idempotency_keys').doc(docId);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     try {
-      const snapshot = await ref.get();
-      if (snapshot.exists) {
-        const cached = snapshot.data();
-        if (!cached.expiresAt || new Date(cached.expiresAt).getTime() > Date.now()) {
+      // Atomic reservation: create() fails if the doc already exists.
+      try {
+        await ref.create({
+          status: 'in_flight',
+          key,
+          clientId: req.clientId,
+          method: req.method,
+          path: req.path,
+          createdAt: nowIso(),
+          expiresAt,
+        });
+      } catch (_createErr) {
+        // Doc exists — either completed (replay) or still in-flight (409).
+        const snap = await ref.get();
+        const cached = snap.exists ? snap.data() : null;
+        if (cached?.status === 'completed' &&
+            (!cached.expiresAt || new Date(cached.expiresAt).getTime() > Date.now())) {
           res.set('X-Idempotent-Replay', 'true');
           res.status(cached.statusCode || 200).json(cached.body || {});
           return;
         }
+        // In-flight or expired — tell caller to retry
+        res.status(409).json({ error: 'Request already in progress', retryable: true });
+        return;
       }
 
       const originalJson = res.json.bind(res);
       res.json = (body) => {
         if (res.statusCode < 500) {
-          ref.set({
-            key,
-            clientId: req.clientId,
-            method: req.method,
-            path: req.path,
-            statusCode: res.statusCode,
-            body,
-            createdAt: nowIso(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          }).catch((error) => {
-            if (context.logger) context.logger.error({ err: error }, 'Failed to store idempotency response');
-          });
+          ref.set({ status: 'completed', statusCode: res.statusCode, body, expiresAt }, { merge: true })
+            .catch((error) => {
+              if (context.logger) context.logger.error({ err: error }, 'Failed to store idempotency response');
+            });
+        } else {
+          // On 5xx, delete the reservation so the client can retry
+          ref.delete().catch(() => {});
         }
         return originalJson(body);
       };
@@ -857,24 +883,43 @@ function installPhase56Routes(app, context) {
 
   app.post('/api/intel/crowd-report', async (req, res, next) => {
     try {
+      const { getRideMultiplier } = require('./rides');
+      const rideResult = await getRideMultiplier(context.firestore, req.clientId);
+      if (rideResult.multiplier <= 1) {
+        return res.status(403).json({ error: 'An active ride session is required to submit crowd reports.' });
+      }
+
       const trainId = cleanId(req.body.trainId, 'unknown_train');
       const coachId = cleanId(req.body.coachId, 'coach_1');
       const crowdLevel = Math.max(0, Math.min(4, Number(req.body.crowdLevel || 0)));
+
+      // Rate-limit: one report per user per train per 5 minutes
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const recentSnap = await context.firestore.collection('metrosafar_crowd_reports')
+        .where('clientId', '==', req.clientId)
+        .where('trainId', '==', trainId)
+        .where('createdAt', '>=', fiveMinutesAgo)
+        .limit(1)
+        .get();
+      if (!recentSnap.empty) {
+        return res.status(429).json({ error: 'Please wait before submitting another report for this train.' });
+      }
+
+      // Reliability based on completed rides history
+      const userState = await context.getUserState(req.clientId);
+      const ridesCompleted = Number(userState.ridesCompleted || 0);
+      const userReliabilityScore = Math.min(1, 0.3 + ridesCompleted * 0.05);
+
       await context.firestore.collection('metrosafar_crowd_reports').add({
         clientId: req.clientId,
         trainId,
         coachId,
         crowdLevel,
-        userReliabilityScore: 1,
+        userReliabilityScore,
         createdAt: nowIso(),
       });
       if (context.io) {
-        context.io.to(`train:${trainId}`).emit('crowding_update', {
-          trainId,
-          coachId,
-          crowdLevel,
-          asOf: nowIso(),
-        });
+        context.io.to(`train:${trainId}`).emit('crowding_update', { trainId, coachId, crowdLevel, asOf: nowIso() });
       }
       res.json({ accepted: true, trainId, coachId, crowdLevel });
     } catch (error) {
@@ -900,8 +945,10 @@ function installPhase56Routes(app, context) {
         });
 
       const coaches = Object.entries(byCoach).map(([coachId, reports]) => {
-        const average = reports.reduce((sum, report) => sum + Number(report.crowdLevel || 0), 0) /
-          Math.max(1, reports.length);
+        // Weighted average by user reliability score
+        const totalWeight = reports.reduce((s, r) => s + Number(r.userReliabilityScore || 0.3), 0);
+        const weightedSum = reports.reduce((s, r) => s + Number(r.crowdLevel || 0) * Number(r.userReliabilityScore || 0.3), 0);
+        const average = totalWeight > 0 ? weightedSum / totalWeight : 0;
         return {
           coachId,
           reportCount: reports.length,
