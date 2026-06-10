@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:metrosafar/config/api_config.dart';
+import 'package:metrosafar/core/commute/commute_session.dart';
 import 'package:metrosafar/core/commute/ride_verification.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/sync/outbox.dart';
@@ -109,9 +110,11 @@ class BackendService {
 
   /// Award points after a rewarded ad completes (server enforces the daily cap).
   Future<Map<String, dynamic>> claimAdReward() {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/rewards/watch-ad',
+      activityType: 'video',
+      entityId: 'rewarded_ad',
       cacheKey: 'cache_ad_reward',
     );
   }
@@ -199,9 +202,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> watchVideo(String videoId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/rewards/watch/$videoId',
+      activityType: 'video',
+      entityId: videoId,
       cacheKey: 'cache_rewards',
     );
   }
@@ -242,9 +247,11 @@ class BackendService {
     int? questionsAnswered,
     int? streak,
   }) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/games/$gameId/complete',
+      activityType: 'game',
+      entityId: gameId,
       cacheKey: 'cache_games',
       body: {
         'score': score,
@@ -299,13 +306,21 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> claimStreakBonus() {
-    return _sendJson('POST', '/api/streak/claim', cacheKey: 'cache_home');
+    return _sendRewardJson(
+      'POST',
+      '/api/streak/claim',
+      activityType: 'streak',
+      entityId: 'daily',
+      cacheKey: 'cache_home',
+    );
   }
 
   Future<Map<String, dynamic>> completeQuest(String questId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/quests/$questId/complete',
+      activityType: 'quest',
+      entityId: questId,
       cacheKey: 'cache_home',
     );
   }
@@ -318,9 +333,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> scratchCard(String cardId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/scratch-cards/$cardId/scratch',
+      activityType: 'scratch',
+      entityId: cardId,
       cacheKey: 'cache_games',
     );
   }
@@ -330,9 +347,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> markArticleRead(String articleId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/articles/$articleId/read',
+      activityType: 'article',
+      entityId: articleId,
       cacheKey: 'cache_articles',
     );
   }
@@ -345,9 +364,11 @@ class BackendService {
     String surveyId,
     String selectedOption,
   ) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/surveys/$surveyId/submit',
+      activityType: 'survey',
+      entityId: surveyId,
       cacheKey: 'cache_surveys',
       body: {'selectedOption': selectedOption},
     );
@@ -358,9 +379,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> completeStory(String storyId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/stories/$storyId/complete',
+      activityType: 'story',
+      entityId: storyId,
       cacheKey: 'cache_stories',
     );
   }
@@ -543,9 +566,11 @@ class BackendService {
     String? entityId,
     Map<String, dynamic>? metadata,
   }) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/activity-events',
+      activityType: 'activity',
+      entityId: type,
       cacheKey: 'cache_activity_event',
       body: {
         'type': type,
@@ -640,6 +665,7 @@ class BackendService {
     String? cityId,
     String? phase,
     RideVerification? ticketVerification,
+    CommuteSignal? location,
   }) {
     return _sendJson(
       'POST',
@@ -654,6 +680,7 @@ class BackendService {
         if (phase != null) 'phase': phase,
         if (ticketVerification != null)
           'ticketVerification': ticketVerification.toJson(),
+        if (location != null) 'location': location.toHeartbeatJson(),
         'detectedAt': DateTime.now().toIso8601String(),
       },
     );
@@ -668,6 +695,17 @@ class BackendService {
       '/api/trip/commute-session/$sessionId/end',
       cacheKey: 'cache_commute_session',
       body: {if (endStationId != null) 'endStationId': endStationId},
+    );
+  }
+
+  Future<Map<String, dynamic>> sendCommuteHeartbeat({
+    required String sessionId,
+    required CommuteSignal signal,
+  }) {
+    return _sendJson(
+      'POST',
+      '/api/trip/commute-session/$sessionId/heartbeat',
+      body: signal.toHeartbeatJson(),
     );
   }
 
@@ -872,6 +910,31 @@ class BackendService {
       };
     }
     throw lastError ?? Exception('Request failed');
+  }
+
+  Future<Map<String, dynamic>> _sendRewardJson(
+    String method,
+    String path, {
+    required String activityType,
+    required String entityId,
+    String? cacheKey,
+    Map<String, dynamic>? body,
+  }) async {
+    final attempt = await _sendJson(
+      'POST',
+      '/api/reward-attempts',
+      body: {'activityType': activityType, 'entityId': entityId},
+    );
+    final attemptId = attempt['attemptId'] as String?;
+    if (attemptId == null) {
+      throw Exception('Could not create a secure reward attempt.');
+    }
+    return _sendJson(
+      method,
+      path,
+      cacheKey: cacheKey,
+      body: {...?body, 'attemptId': attemptId},
+    );
   }
 
   /// Exponential backoff with full jitter: base 300ms * 2^(attempt-1), randomised

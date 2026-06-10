@@ -14,7 +14,12 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
   final BackendService _backend;
   final CommuteDetector _detector;
   StreamSubscription<CommuteSignal>? _signalSub;
+  Timer? _heartbeatTimer;
+  List<MetroStation> _stations = const [];
   bool _started = false;
+  bool? _lastCompletionVerified;
+
+  bool? get lastCompletionVerified => _lastCompletionVerified;
 
   CommuteNotifier(this._backend, this._detector)
     : super(const CommuteSessionState());
@@ -25,6 +30,7 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
   }) async {
     if (_started) return;
     _started = true;
+    _stations = stations;
     await restoreActiveSession(stations: stations);
     if (!state.isActive) {
       state = state.copyWith(phase: CommutePhase.detecting);
@@ -42,21 +48,6 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
         speedKmh: signal.speedKmh,
         station: signal.station,
       );
-      if (signal.isHighConfidence) {
-        _backend
-            .submitCommuteSignal(
-              confidenceScore: signal.confidenceScore,
-              vibrationScore: signal.vibrationScore,
-              speedKmh: signal.speedKmh,
-              stationId: signal.station?.id,
-              cityId: cityId,
-              phase: 'confirmed',
-            )
-            .catchError((error) {
-              debugPrint('Commute signal submit failed: $error');
-              return <String, dynamic>{};
-            });
-      }
     });
     _detector.start(stations: stations);
   }
@@ -89,7 +80,14 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
         station: station,
         startedAt: DateTime.tryParse(session['startedAt'] as String? ?? ''),
         rewardsEligible: true,
+        lastHeartbeatAt: DateTime.tryParse(
+          session['lastHeartbeatAt'] as String? ?? '',
+        ),
+        validHeartbeatCount:
+            (session['validHeartbeatCount'] as num?)?.toInt() ?? 0,
       );
+      await _sendHeartbeat();
+      _startHeartbeatTimer();
       return true;
     } catch (error) {
       debugPrint('Commute session restore failed: $error');
@@ -126,6 +124,17 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
   }) async {
     final previous = state;
     try {
+      final location = await _detector.captureHeartbeat(
+        _stations,
+        vibrationScore: state.vibrationScore,
+      );
+      if (location == null || !location.hasLocationEvidence) {
+        state = previous.copyWith(
+          error:
+              'A trusted, high-accuracy station location is required to start.',
+        );
+        return false;
+      }
       final data = await _backend.submitCommuteSignal(
         confidenceScore: state.confidenceScore <= 0 ? 1 : state.confidenceScore,
         vibrationScore: state.vibrationScore,
@@ -134,6 +143,7 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
         cityId: cityId,
         phase: phase,
         ticketVerification: ticketVerification,
+        location: location,
       );
       final raw = data['session'];
       final session =
@@ -153,7 +163,13 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
             DateTime.tryParse(session['startedAt'] as String? ?? '') ??
             DateTime.now(),
         rewardsEligible: true,
+        lastHeartbeatAt: DateTime.tryParse(
+          session['lastHeartbeatAt'] as String? ?? '',
+        ),
+        validHeartbeatCount:
+            (session['validHeartbeatCount'] as num?)?.toInt() ?? 1,
       );
+      _startHeartbeatTimer();
       return true;
     } catch (error) {
       debugPrint('Commute session open failed: $error');
@@ -166,13 +182,16 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
     final sessionId = state.sessionId;
     if (sessionId == null) return false;
     final previous = state;
-    state = state.copyWith(phase: CommutePhase.ending);
     try {
-      await _backend.endCommuteSession(
+      await _sendHeartbeat();
+      state = state.copyWith(phase: CommutePhase.ending);
+      final result = await _backend.endCommuteSession(
         sessionId: sessionId,
         endStationId: endStationId,
       );
+      _lastCompletionVerified = result['verifiedCompletion'] == true;
       state = const CommuteSessionState(phase: CommutePhase.detecting);
+      _heartbeatTimer?.cancel();
       return true;
     } catch (error) {
       debugPrint('Commute session end failed: $error');
@@ -187,9 +206,52 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
     state = const CommuteSessionState(phase: CommutePhase.detecting);
   }
 
+  void _startHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _sendHeartbeat();
+    });
+  }
+
+  Future<void> _sendHeartbeat() async {
+    final sessionId = state.sessionId;
+    if (sessionId == null || state.phase == CommutePhase.ending) return;
+    final signal = await _detector.captureHeartbeat(
+      _stations,
+      vibrationScore: state.vibrationScore,
+    );
+    if (signal == null || !signal.hasLocationEvidence) {
+      state = state.copyWith(
+        rewardsEligible: false,
+        error: 'Points paused until Ride Mode can verify your location.',
+      );
+      return;
+    }
+    try {
+      final data = await _backend.sendCommuteHeartbeat(
+        sessionId: sessionId,
+        signal: signal,
+      );
+      state = state.copyWith(
+        rewardsEligible: data['rewardsEligible'] == true,
+        lastHeartbeatAt: DateTime.now(),
+        validHeartbeatCount:
+            (data['validHeartbeatCount'] as num?)?.toInt() ??
+            state.validHeartbeatCount,
+      );
+    } catch (error) {
+      debugPrint('Commute heartbeat failed: $error');
+      state = state.copyWith(
+        rewardsEligible: false,
+        error: 'Points paused while Ride Mode reconnects.',
+      );
+    }
+  }
+
   @override
   void dispose() {
     _signalSub?.cancel();
+    _heartbeatTimer?.cancel();
     _detector.dispose();
     super.dispose();
   }

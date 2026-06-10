@@ -25,9 +25,22 @@ const { generateStationToken, validateStationToken } = require('./lib/qr-tokens'
 const { verifyAdMobSSV } = require('./lib/admob-ssv');
 const { validateTriviaScore } = require('./lib/anti-cheat');
 const {
+  HEARTBEAT_MIN_INTERVAL_MS,
+  MAX_LOCATION_ACCURACY_METERS,
+  MAX_NETWORK_DISTANCE_METERS,
+  MAX_START_STATION_DISTANCE_METERS,
   gameRewardClaimKey,
+  hasRewardEvidence,
+  hasVerifiedCompletionEvidence,
+  haversineMeters,
   isCommuteSessionExpired,
 } = require('./lib/commute-policy');
+const {
+  doesRewardAttemptMatch,
+  isRewardAttemptValid,
+  rewardAttemptId,
+  rewardLedgerId,
+} = require('./lib/reward-policy');
 const {
   installPhase56Middleware,
   installPhase56Routes,
@@ -52,7 +65,7 @@ const PORT = Number(process.env.PORT || 8080);
 //   MIN_SUPPORTED_BUILD — integer Android versionCode / iOS CFBundleVersion.
 //   APP_STORE_URL       — where the update button sends the user.
 const APP_CONFIG = {
-  minSupportedBuild: Number(process.env.MIN_SUPPORTED_BUILD || 24),
+  minSupportedBuild: Number(process.env.MIN_SUPPORTED_BUILD || 26),
   storeUrl:
     process.env.APP_STORE_URL ||
     'https://play.google.com/store/apps/details?id=com.tlventures.metrosafar',
@@ -301,6 +314,7 @@ const profilePatchSchema = z.object({
 });
 
 const gameCompleteSchema = z.object({
+  attemptId: z.string().uuid(),
   score: z.number().int().min(0).max(100000).default(0),
   timeSpent: z.number().int().min(0).max(86400).optional(),
   cityId: z.string().trim().min(1).max(80).optional(),
@@ -340,7 +354,24 @@ const commuteSessionSchema = z.object({
   cityId: z.string().trim().min(1).max(80).optional(),
   phase: z.enum(['detecting', 'confirmed', 'active']).optional(),
   ticketVerification: ticketVerificationSchema.optional(),
+  location: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    accuracyMeters: z.number().min(0).max(1000),
+    speedKmh: z.number().min(0).max(180).optional(),
+    recordedAt: z.string(),
+    deviceTrusted: z.boolean(),
+  }).optional(),
   detectedAt: z.string().optional(),
+});
+
+const commuteHeartbeatSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracyMeters: z.number().min(0).max(1000),
+  speedKmh: z.number().min(0).max(180).optional(),
+  recordedAt: z.string(),
+  deviceTrusted: z.boolean(),
 });
 
 const commuteEndSchema = z.object({
@@ -349,17 +380,33 @@ const commuteEndSchema = z.object({
 });
 
 const activityEventSchema = z.object({
+  attemptId: z.string().uuid(),
   type: z.string().min(1).max(80),
   entityId: z.string().max(120).optional().nullable(),
   metadata: z.object({ points: z.number().int().min(0).max(1000).optional() }).optional(),
 });
 
+const attemptOnlySchema = z.object({
+  attemptId: z.string().uuid(),
+});
+
 const surveySubmitSchema = z.object({
+  attemptId: z.string().uuid(),
+  selectedOption: z.string().trim().min(1).max(500).optional(),
   answers: z.array(z.unknown()).optional(),
 });
 
 const storyCompleteSchema = z.object({
+  attemptId: z.string().uuid(),
   timeSpent: z.number().int().min(0).max(86400).optional(),
+});
+
+const rewardAttemptSchema = z.object({
+  activityType: z.enum([
+    'game', 'video', 'streak', 'quest', 'scratch', 'article', 'survey',
+    'story', 'activity',
+  ]),
+  entityId: z.string().trim().min(1).max(120),
 });
 
 // ---------------------------------------------------------------------------
@@ -412,6 +459,13 @@ const claimLimiter = contentLimiter;
 
 const generalLimiter = buildLimiter('rl:general:', 200);
 const GAME_DAILY_POINT_CAP = 150;
+const GAME_COMPLETION_POINTS = {
+  daily_spin: 20,
+  trivia: 25,
+  sudoku: 25,
+  word_puzzle: 25,
+  city_explorer: 25,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -812,15 +866,182 @@ async function getActiveCommuteSession(clientId) {
   return session;
 }
 
+function stationsForCity(cityId) {
+  const cityStations = cityRegistry[cityId]?.stations;
+  return Array.isArray(cityStations) && cityStations.length > 0
+    ? cityStations
+    : stations;
+}
+
+function stationCoordinates(station) {
+  if (!station) return null;
+  const lat = Number(station.lat ?? station.latitude);
+  const lng = Number(station.lng ?? station.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function findSessionStation(session, stationId) {
+  return stationsForCity(session?.cityId).find((station) => station.id === stationId) || null;
+}
+
+function findStationCity(stationId) {
+  for (const [cityId, bundle] of Object.entries(cityRegistry)) {
+    if ((bundle.stations || []).some((station) => station.id === stationId)) {
+      return cityId;
+    }
+  }
+  return stations.some((station) => station.id === stationId) ? 'hyd' : null;
+}
+
+function nearestNetworkDistanceMeters(cityId, location) {
+  let nearest = Infinity;
+  for (const station of stationsForCity(cityId)) {
+    const coordinates = stationCoordinates(station);
+    if (!coordinates) continue;
+    nearest = Math.min(nearest, haversineMeters(location, coordinates));
+  }
+  return nearest;
+}
+
+function validateHeartbeatEvidence(session, body, { initial = false } = {}) {
+  const recordedAtMs = Date.parse(body.recordedAt || '');
+  const nowMs = Date.now();
+  if (!body.deviceTrusted) return { valid: false, reason: 'device_not_trusted' };
+  if (!Number.isFinite(recordedAtMs) ||
+      recordedAtMs > nowMs + 30_000 ||
+      nowMs - recordedAtMs > 2 * 60 * 1000) {
+    return { valid: false, reason: 'stale_location' };
+  }
+  if (body.accuracyMeters > MAX_LOCATION_ACCURACY_METERS) {
+    return { valid: false, reason: 'location_accuracy_too_low' };
+  }
+
+  const location = { lat: body.lat, lng: body.lng };
+  const networkDistanceMeters = nearestNetworkDistanceMeters(session.cityId, location);
+  if (networkDistanceMeters > MAX_NETWORK_DISTANCE_METERS) {
+    return { valid: false, reason: 'outside_metro_network', networkDistanceMeters };
+  }
+
+  if (initial) {
+    const qrStation = findSessionStation(session, session.ticketVerification?.stationId);
+    const qrCoordinates = stationCoordinates(qrStation);
+    if (!qrCoordinates ||
+        haversineMeters(location, qrCoordinates) > MAX_START_STATION_DISTANCE_METERS) {
+      return { valid: false, reason: 'not_near_qr_station' };
+    }
+  }
+
+  const previous = session.lastHeartbeat;
+  const previousAtMs = Date.parse(session.lastHeartbeatAt || '');
+  if (previous && Number.isFinite(previousAtMs)) {
+    const elapsedMs = nowMs - previousAtMs;
+    if (elapsedMs < HEARTBEAT_MIN_INTERVAL_MS) {
+      return { valid: false, reason: 'heartbeat_too_frequent' };
+    }
+    const distanceMeters = haversineMeters(previous, location);
+    const maxDistanceMeters =
+      (160 / 3.6) *
+      (elapsedMs / 1000) +
+      Number(body.accuracyMeters || 0) +
+      Number(previous.accuracyMeters || 0);
+    if (distanceMeters > maxDistanceMeters) {
+      return { valid: false, reason: 'implausible_movement', distanceMeters };
+    }
+  }
+
+  return { valid: true, networkDistanceMeters };
+}
+
 function isEligibleCommuteSession(session) {
   return Boolean(
     session &&
     session.status === 'active' &&
+    hasRewardEvidence(session) &&
     (
       session.rewardsEligible === true ||
       session.ticketVerification?.status === 'hmac_verified'
     ),
   );
+}
+
+async function claimRewardTransaction(
+  clientId,
+  commute,
+  attemptId,
+  activityType,
+  entityId,
+  cb,
+) {
+  const userRef = firestore.collection('metrosafar_users').doc(clientId);
+  const attemptRef = firestore.collection('metrosafar_reward_attempts').doc(attemptId);
+  const ledgerRef = firestore.collection('metrosafar_reward_ledger').doc(
+    rewardLedgerId(clientId, commute.id, activityType, entityId),
+  );
+
+  const result = await firestore.runTransaction(async (txn) => {
+    const [userSnapshot, attemptSnapshot, ledgerSnapshot] = await Promise.all([
+      txn.get(userRef),
+      txn.get(attemptRef),
+      txn.get(ledgerRef),
+    ]);
+    if (!attemptSnapshot.exists) {
+      const error = new Error('Reward attempt not found');
+      error.statusCode = 400;
+      throw error;
+    }
+    const attempt = attemptSnapshot.data();
+    if (ledgerSnapshot.exists) {
+      const ledger = ledgerSnapshot.data();
+      if (ledger.attemptId !== attemptId || !doesRewardAttemptMatch(attempt, {
+        userId: clientId,
+        commuteSessionId: commute.id,
+        activityType,
+        entityId,
+      })) {
+        const error = new Error('Reward attempt does not match this ledger');
+        error.statusCode = 400;
+        throw error;
+      }
+      return { ...ledger.response, ledgerReplay: true };
+    }
+    if (!isRewardAttemptValid(attempt, {
+      userId: clientId,
+      commuteSessionId: commute.id,
+      activityType,
+      entityId,
+    })) {
+      const error = new Error('Reward attempt is invalid or expired');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const state = userSnapshot.exists
+      ? buildDerivedProfile(userSnapshot.data())
+      : defaultUserState(clientId);
+    const { next, response, pointsAwarded = 0 } = await cb(txn, state, userRef);
+    const completedAt = new Date().toISOString();
+    if (next) {
+      txn.set(userRef, buildDerivedProfile({
+        ...next,
+        lastUpdated: completedAt,
+      }), { merge: true });
+    }
+    const ledger = {
+      attemptId,
+      userId: clientId,
+      commuteSessionId: commute.id,
+      activityType,
+      entityId,
+      pointsAwarded,
+      response,
+      createdAt: completedAt,
+    };
+    txn.set(ledgerRef, ledger);
+    txn.set(attemptRef, { status: 'consumed', consumedAt: completedAt }, { merge: true });
+    return { ...response, ledgerId: ledgerRef.id };
+  });
+  await cacheDel(`user:${clientId}`);
+  return result;
 }
 
 async function requireEligibleCommuteSession(clientId) {
@@ -1555,24 +1776,38 @@ app.get('/api/rewards', async (req, res, next) => {
   }
 });
 
-app.post('/api/rewards/watch/:videoId', redeemLimiter, async (req, res, next) => {
+app.post('/api/rewards/watch/:videoId', redeemLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
     const video = catalog.videos.find((item) => item.id === req.params.videoId);
     if (!video) { res.status(404).json({ error: 'Video not found' }); return; }
 
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'video',
+      video.id,
+      async (txn, state) => {
       const watched = new Set(state.watchedVideoIds || []);
       let nextPoints = state.points;
+      let pointsEarned = 0;
       if (!watched.has(video.id)) {
         watched.add(video.id);
-        nextPoints += Number(video.points || 0);
+        pointsEarned = Number(video.points || 0);
+        nextPoints += pointsEarned;
       }
       return {
         next: { ...state, points: nextPoints, watchedVideoIds: [...watched] },
-        response: { points: nextPoints, video: { ...video, watched: true } },
+        pointsAwarded: pointsEarned,
+        response: {
+          points: nextPoints,
+          pointsEarned,
+          video: { ...video, watched: true },
+        },
       };
-    });
+      },
+    );
 
     res.json(response);
   } catch (error) {
@@ -1762,7 +1997,13 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
     }
 
     const commute = await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'game',
+      req.params.gameId,
+      async (txn, state) => {
       const now = new Date();
       const isDailySpin = req.params.gameId === 'daily_spin';
       const lastDailySpinAt = state.lastDailySpinAt ? new Date(state.lastDailySpinAt) : null;
@@ -1815,7 +2056,7 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
         };
       }
       const newScore = Math.max(current.score, Number(req.body.score) || 0);
-      const basePoints = Math.min(50, Math.max(15, Math.floor(Number(req.body.score) / 2)));
+      const basePoints = GAME_COMPLETION_POINTS[req.params.gameId] || 20;
       const pointsEarned = Math.min(
         Math.round(basePoints * commute.multiplier),
         GAME_DAILY_POINT_CAP - gamePointsToday,
@@ -1834,15 +2075,17 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
       };
       return {
         next,
+        pointsAwarded: pointsEarned,
         response: {
           pointsEarned,
           totalPoints: next.points,
           commuteMultiplier: commute.multiplier,
-          commuteSessionId: commute.session?.id || null,
+          commuteSessionId: commute.id,
           gameScore: next.gameScores[req.params.gameId],
         },
       };
-    });
+      },
+    );
 
     if (!response.alreadyPlayedToday && response.pointsEarned > 0) {
       try {
@@ -1876,10 +2119,16 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
 // Streak (transactional)
 // ---------------------------------------------------------------------------
 
-app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
+app.post('/api/streak/claim', gameLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'streak',
+      'daily',
+      async (txn, state) => {
       const now = new Date();
       const lastClaim = state.lastStreakClaimAt ? new Date(state.lastStreakClaimAt) : null;
       const todayIst = istDayString(now);
@@ -1895,8 +2144,13 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
       const newLongest = Math.max(state.longestStreak || 0, newDay);
       const pointsEarned = 5 * newDay;
       const next = { ...state, points: state.points + pointsEarned, streakDay: newDay, longestStreak: newLongest, lastStreakClaimAt: now.toISOString() };
-      return { next, response: { streakDay: newDay, longestStreak: newLongest, pointsEarned, totalPoints: next.points, reset: !continuing } };
-    });
+      return {
+        next,
+        pointsAwarded: pointsEarned,
+        response: { streakDay: newDay, longestStreak: newLongest, pointsEarned, totalPoints: next.points, reset: !continuing },
+      };
+      },
+    );
 
     res.json(response);
   } catch (error) {
@@ -1914,12 +2168,18 @@ const QUEST_POINTS = {
   'start_ride': 30, 'station_quiz': 25, 'check_passport': 10,
 };
 
-app.post('/api/quests/:questId/complete', gameLimiter, async (req, res, next) => {
+app.post('/api/quests/:questId/complete', gameLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
     if (!QUEST_POINTS[req.params.questId]) { res.status(404).json({ error: 'Quest not found' }); return; }
 
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'quest',
+      req.params.questId,
+      async (txn, state) => {
       const completed = new Set(state.completedQuests || []);
       if (completed.has(req.params.questId)) {
         const err = new Error('Quest already completed today'); err.statusCode = 400; throw err;
@@ -1927,8 +2187,13 @@ app.post('/api/quests/:questId/complete', gameLimiter, async (req, res, next) =>
       completed.add(req.params.questId);
       const pointsEarned = QUEST_POINTS[req.params.questId];
       const next = { ...state, points: state.points + pointsEarned, completedQuests: [...completed] };
-      return { next, response: { questId: req.params.questId, pointsEarned, totalPoints: next.points, completedQuests: next.completedQuests } };
-    });
+      return {
+        next,
+        pointsAwarded: pointsEarned,
+        response: { questId: req.params.questId, pointsEarned, totalPoints: next.points, completedQuests: next.completedQuests },
+      };
+      },
+    );
 
     res.json(response);
   } catch (error) {
@@ -1959,11 +2224,17 @@ app.get('/api/games/leaderboard', async (req, res, next) => {
 // Scratch cards (transactional — one scratch per card per user)
 // ---------------------------------------------------------------------------
 
-app.post('/api/scratch-cards/:cardId/scratch', contentLimiter, async (req, res, next) => {
+app.post('/api/scratch-cards/:cardId/scratch', contentLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
     const cardId = req.params.cardId;
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'scratch',
+      cardId,
+      async (txn, state) => {
       const wins = state.scratchCardWins || [];
       const alreadyScratched = wins.some((w) => w.cardId === cardId);
       if (alreadyScratched) {
@@ -1976,8 +2247,13 @@ app.post('/api/scratch-cards/:cardId/scratch', contentLimiter, async (req, res, 
         points: state.points + reward,
         scratchCardWins: [...wins, { cardId, reward, timestamp: new Date().toISOString() }],
       };
-      return { next, response: { reward, totalPoints: next.points, message: `You won ${reward} points!` } };
-    });
+      return {
+        next,
+        pointsAwarded: reward,
+        response: { reward, totalPoints: next.points, message: `You won ${reward} points!` },
+      };
+      },
+    );
 
     res.json(response);
   } catch (error) {
@@ -2003,19 +2279,30 @@ app.get('/api/articles', async (req, res, next) => {
   }
 });
 
-app.post('/api/articles/:articleId/read', contentLimiter, async (req, res, next) => {
+app.post('/api/articles/:articleId/read', contentLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
     const article = catalog.articles.find((a) => a.id === req.params.articleId);
     if (!article) { res.status(404).json({ error: 'Article not found' }); return; }
 
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'article',
+      article.id,
+      async (txn, state) => {
       const read = new Set(state.readArticleIds || []);
       let pointsEarned = 0;
       if (!read.has(article.id)) { read.add(article.id); pointsEarned = article.points || 0; }
       const next = { ...state, points: state.points + pointsEarned, readArticleIds: [...read] };
-      return { next, response: { pointsEarned, totalPoints: next.points, article: { ...article, isRead: true } } };
-    });
+      return {
+        next,
+        pointsAwarded: pointsEarned,
+        response: { pointsEarned, totalPoints: next.points, article: { ...article, isRead: true } },
+      };
+      },
+    );
 
     if (response.pointsEarned > 0) {
       await incrementWeeklyStats(req.clientId, {
@@ -2052,8 +2339,14 @@ app.post('/api/surveys/:surveyId/submit', contentLimiter, validate(surveySubmitS
     const survey = catalog.surveys.find((s) => s.id === req.params.surveyId);
     if (!survey) { res.status(404).json({ error: 'Survey not found' }); return; }
 
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'survey',
+      survey.id,
+      async (txn, state) => {
       const completed = new Set(state.completedSurveys || []);
       if (completed.has(survey.id)) {
         const err = new Error('Survey already completed'); err.statusCode = 400; throw err;
@@ -2061,8 +2354,13 @@ app.post('/api/surveys/:surveyId/submit', contentLimiter, validate(surveySubmitS
       completed.add(survey.id);
       const pointsEarned = survey.points || 0;
       const next = { ...state, points: state.points + pointsEarned, completedSurveys: [...completed] };
-      return { next, response: { pointsEarned, totalPoints: next.points, survey: { ...survey, isCompleted: true } } };
-    });
+      return {
+        next,
+        pointsAwarded: pointsEarned,
+        response: { pointsEarned, totalPoints: next.points, survey: { ...survey, isCompleted: true } },
+      };
+      },
+    );
 
     if (response.pointsEarned > 0) {
       await incrementWeeklyStats(req.clientId, {
@@ -2100,14 +2398,25 @@ app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyComplet
     const story = (staticData.stories || []).find((s) => s.id === req.params.storyId);
     if (!story) { res.status(404).json({ error: 'Story not found' }); return; }
 
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'story',
+      story.id,
+      async (txn, state) => {
       const completed = new Set(state.completedStories || []);
       let pointsEarned = 0;
       if (!completed.has(story.id)) { completed.add(story.id); pointsEarned = story.points || 25; }
       const next = { ...state, points: state.points + pointsEarned, completedStories: [...completed] };
-      return { next, response: { pointsEarned, totalPoints: next.points, story: { ...story, isCompleted: true } } };
-    });
+      return {
+        next,
+        pointsAwarded: pointsEarned,
+        response: { pointsEarned, totalPoints: next.points, story: { ...story, isCompleted: true } },
+      };
+      },
+    );
 
     if (response.pointsEarned > 0) {
       await incrementWeeklyStats(req.clientId, {
@@ -2127,16 +2436,16 @@ app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyComplet
 // ---------------------------------------------------------------------------
 
 const ACTIVITY_POINT_RULES = {
-  game_completed:         { base: 20, max: 50 },
-  quest_completed:        { base: 20, max: 30 },
-  article_read:           { base: 15, max: 15 },
-  survey_submitted:       { base: 20, max: 20 },
-  story_completed:        { base: 25, max: 25 },
-  ride_started:           { base: 30, max: 30 },
-  ride_completed:         { base: 20, max: 20 },
-  stamp_claimed:          { base: 10, max: 15 },
-  station_quiz_completed: { base: 25, max: 25 },
-  passport_viewed:        { base: 10, max: 10 },
+  game_completed:         { base: 20 },
+  quest_completed:        { base: 20 },
+  article_read:           { base: 15 },
+  survey_submitted:       { base: 20 },
+  story_completed:        { base: 25 },
+  ride_started:           { base: 30 },
+  ride_completed:         { base: 20 },
+  stamp_claimed:          { base: 10 },
+  station_quiz_completed: { base: 25 },
+  passport_viewed:        { base: 10 },
 };
 const DAILY_POINT_CAP = 500;
 const TOP_N = 50; // max leaderboard entries served to clients
@@ -2178,7 +2487,7 @@ app.get('/api/quests/today', async (req, res, next) => {
 
 app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), async (req, res, next) => {
   try {
-    const { type, entityId, metadata } = req.body;
+    const { type, entityId } = req.body;
     if (!ACTIVITY_POINT_RULES[type]) { res.status(400).json({ error: `Unknown activity type: ${type}` }); return; }
     if (type === 'ride_started' || type === 'ride_completed') {
       res.status(400).json({
@@ -2188,22 +2497,14 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
       return;
     }
 
-    const commuteRequiredTypes = new Set([
-      'game_completed',
-      'quest_completed',
-      'article_read',
-      'survey_submitted',
-      'story_completed',
-      'stamp_claimed',
-      'station_quiz_completed',
-      'passport_viewed',
-    ]);
-    if (commuteRequiredTypes.has(type)) {
-      await requireEligibleCommuteSession(req.clientId);
-    }
-
-    const commute = await maybeGetCommuteMultiplier(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'activity',
+      type,
+      async (txn, state) => {
       const today = new Date().toDateString();
       const isNewDay = !state.lastDailyEarnDate || new Date(state.lastDailyEarnDate).toDateString() !== today;
       const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
@@ -2216,8 +2517,7 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
       }
 
       const rule = ACTIVITY_POINT_RULES[type];
-      const requested = metadata?.points ? Math.min(Number(metadata.points), rule.max) : rule.base;
-      const boosted = Math.round(requested * commute.multiplier);
+      const boosted = Math.round(rule.base * commute.multiplier);
       const pointsAwarded = Math.min(boosted, DAILY_POINT_CAP - currentDailyEarned);
       const txnId = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const txnRecord = {
@@ -2238,17 +2538,19 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
       };
       return {
         next,
+        pointsAwarded,
         response: {
           transactionId: txnId,
           pointsAwarded,
           commuteMultiplier: commute.multiplier,
-          commuteSessionId: commute.session?.id || null,
+          commuteSessionId: commute.id,
           totalPoints: next.points,
           dailyEarned: currentDailyEarned + pointsAwarded,
           dailyCap: DAILY_POINT_CAP,
         },
       };
-    });
+      },
+    );
 
     if (response.pointsAwarded > 0) {
       try {
@@ -2388,41 +2690,81 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
       return res.status(400).send('INVALID_SIGNATURE');
     }
 
-    // Idempotency: skip if this transaction was already processed.
     const txnRef = firestore.collection('ssv_transactions').doc(transaction_id);
-    const existing = await txnRef.get();
-    if (existing.exists) {
-      return res.status(200).send('OK'); // already awarded
-    }
-
-    // Award using the same daily-cap logic as the existing watch-ad endpoint.
     const amount = Number(reward_amount) || AD_REWARD_POINTS;
-    await requireEligibleCommuteSession(user_id);
-    await claimTransaction(user_id, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(user_id);
+    const userRef = firestore.collection('metrosafar_users').doc(user_id);
+    const ledgerRef = firestore.collection('metrosafar_reward_ledger').doc(
+      crypto.createHash('sha256').update(`admob:${transaction_id}`).digest('hex'),
+    );
+    const result = await firestore.runTransaction(async (txn) => {
+      const [existing, userSnapshot] = await Promise.all([
+        txn.get(txnRef),
+        txn.get(userRef),
+      ]);
+      if (existing.exists) return { replay: true, ...existing.data() };
+      const state = userSnapshot.exists
+        ? buildDerivedProfile(userSnapshot.data())
+        : defaultUserState(user_id);
       const today = new Date().toDateString();
       const isNewDay = state.adWatchDate !== today;
       const watchesToday = isNewDay ? 0 : (state.adWatchesToday || 0);
       if (watchesToday >= AD_REWARD_DAILY_LIMIT) {
-        return { next: null, response: { capped: true } };
+        const processed = {
+          userId: user_id,
+          commuteSessionId: commute.id,
+          pointsAwarded: 0,
+          capped: true,
+          ts: new Date().toISOString(),
+        };
+        txn.set(txnRef, processed);
+        txn.set(ledgerRef, {
+          ...processed,
+          activityType: 'video',
+          entityId: 'rewarded_ad',
+          externalTransactionId: transaction_id,
+          response: { capped: true, pointsAwarded: 0 },
+          createdAt: processed.ts,
+        });
+        return processed;
       }
       const questPointsEarned = completeDailyQuestOnce(state, 'watch_video') ? 15 : 0;
+      const pointsAwarded = amount + questPointsEarned;
       const next = {
         ...state,
-        points: state.points + amount + questPointsEarned,
+        points: state.points + pointsAwarded,
         adWatchesToday: watchesToday + 1,
         adWatchDate: today,
       };
-      return { next, response: { pointsAwarded: amount + questPointsEarned } };
+      const processed = {
+        userId: user_id,
+        commuteSessionId: commute.id,
+        pointsAwarded,
+        amount,
+        ts: new Date().toISOString(),
+      };
+      txn.set(userRef, buildDerivedProfile({
+        ...next,
+        lastUpdated: processed.ts,
+      }), { merge: true });
+      txn.set(txnRef, processed);
+      txn.set(ledgerRef, {
+        ...processed,
+        activityType: 'video',
+        entityId: 'rewarded_ad',
+        externalTransactionId: transaction_id,
+        response: { pointsAwarded },
+        createdAt: processed.ts,
+      });
+      return processed;
     });
-
-    // Record for idempotency.
-    await txnRef.set({
+    await cacheDel(`user:${user_id}`);
+    logger.info({
       userId: user_id,
-      amount,
-      ts: new Date().toISOString(),
-    });
-
-    logger.info({ userId: user_id, transaction_id, amount }, 'AdMob SSV: points awarded');
+      transaction_id,
+      pointsAwarded: result.pointsAwarded || 0,
+      replay: result.replay || false,
+    }, 'AdMob SSV processed');
     res.status(200).send('OK');
   } catch (err) {
     logger.error({ err }, 'AdMob SSV handler error');
@@ -2434,10 +2776,16 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
 // Still used as fallback while SSV is being verified in production.
 // Daily cap prevents abuse; will be deprecated once SSV is confirmed stable.
 
-app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
+app.post('/api/rewards/watch-ad', redeemLimiter, validate(attemptOnlySchema), async (req, res, next) => {
   try {
-    await requireEligibleCommuteSession(req.clientId);
-    const response = await claimTransaction(req.clientId, async (txn, state) => {
+    const commute = await requireEligibleCommuteSession(req.clientId);
+    const response = await claimRewardTransaction(
+      req.clientId,
+      commute,
+      req.body.attemptId,
+      'video',
+      'rewarded_ad',
+      async (txn, state) => {
       const today = new Date().toDateString();
       const isNewDay = state.adWatchDate !== today;
       const watchesToday = isNewDay ? 0 : (state.adWatchesToday || 0);
@@ -2472,6 +2820,7 @@ app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
       };
       return {
         next,
+        pointsAwarded: AD_REWARD_POINTS + questPointsEarned,
         response: {
           pointsAwarded: AD_REWARD_POINTS + questPointsEarned,
           watchesToday: watchesToday + 1,
@@ -2479,7 +2828,8 @@ app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
           totalPoints: next.points,
         },
       };
-    });
+      },
+    );
     res.json(response);
   } catch (error) {
     next(error);
@@ -2833,7 +3183,7 @@ app.get('/api/trip/commute-session/active', async (req, res, next) => {
 app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema), async (req, res, next) => {
   try {
     const profile = await getUserState(req.clientId);
-    const cityId = sanitizeCityId(req.body.cityId || profile.activeCityId);
+    let cityId = sanitizeCityId(req.body.cityId || profile.activeCityId);
     const now = new Date().toISOString();
     const highConfidence = req.body.confidenceScore >= 0.75;
     const existing = await getActiveCommuteSession(req.clientId);
@@ -2866,6 +3216,7 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
           status: 'hmac_verified',
           verifiedAt: now,
         };
+        cityId = findStationCity(result.stationId) || cityId;
       } else {
         // Manual/other method — keep existing hash-only flow.
         ticketVerification = {
@@ -2877,10 +3228,38 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
       }
     }
     const rewardsEligible = Boolean(ticketVerification?.status === 'hmac_verified');
-    const desiredStatus = rewardsEligible &&
+    const wantsActive = rewardsEligible &&
       (req.body.phase === 'active' || highConfidence)
-      ? 'active'
-      : 'detecting';
+    let initialHeartbeat = null;
+    if (wantsActive) {
+      if (!req.body.location) {
+        res.status(400).json({
+          error: 'A fresh station location is required to activate Ride Mode.',
+          reason: 'location_required',
+        });
+        return;
+      }
+      const evidence = validateHeartbeatEvidence({
+        cityId,
+        ticketVerification,
+      }, req.body.location, { initial: true });
+      if (!evidence.valid) {
+        res.status(400).json({
+          error: 'Ride location could not be verified.',
+          reason: evidence.reason,
+        });
+        return;
+      }
+      initialHeartbeat = {
+        lat: req.body.location.lat,
+        lng: req.body.location.lng,
+        accuracyMeters: req.body.location.accuracyMeters,
+        speedKmh: req.body.location.speedKmh || 0,
+        recordedAt: req.body.location.recordedAt,
+        receivedAt: now,
+      };
+    }
+    const desiredStatus = wantsActive ? 'active' : 'detecting';
     const payload = {
       userId: req.clientId,
       cityId,
@@ -2898,6 +3277,12 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
       multiplier: desiredStatus === 'active' && rewardsEligible ? 1.5 : 1,
       rewardsEligible,
       ticketVerification,
+      ...(initialHeartbeat ? {
+        lastHeartbeat: initialHeartbeat,
+        lastHeartbeatAt: now,
+        validHeartbeatCount: 1,
+        heartbeatStartedAt: now,
+      } : {}),
     };
     await ref.set(payload, { merge: true });
 
@@ -2916,6 +3301,110 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
   }
 });
 
+app.post(
+  '/api/trip/commute-session/:sessionId/heartbeat',
+  tripLimiter,
+  validate(commuteHeartbeatSchema),
+  async (req, res, next) => {
+    try {
+      const ref = firestore.collection('metrosafar_commute_sessions')
+        .doc(req.params.sessionId);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data().userId !== req.clientId) {
+        res.status(404).json({ error: 'Commute session not found' });
+        return;
+      }
+      const session = { id: snap.id, ...snap.data() };
+      if (session.status !== 'active' || isCommuteSessionExpired(session)) {
+        res.status(409).json({
+          error: 'Commute session is no longer active',
+          reason: 'session_inactive',
+        });
+        return;
+      }
+      const evidence = validateHeartbeatEvidence(session, req.body);
+      if (!evidence.valid) {
+        if (evidence.reason === 'heartbeat_too_frequent') {
+          res.json({
+            accepted: false,
+            reason: evidence.reason,
+            validHeartbeatCount: Number(session.validHeartbeatCount || 0),
+            rewardsEligible: hasRewardEvidence(session),
+          });
+          return;
+        }
+        res.status(400).json({
+          error: 'Commute heartbeat rejected',
+          reason: evidence.reason,
+        });
+        return;
+      }
+      const now = new Date().toISOString();
+      const heartbeat = {
+        lat: req.body.lat,
+        lng: req.body.lng,
+        accuracyMeters: req.body.accuracyMeters,
+        speedKmh: req.body.speedKmh || 0,
+        recordedAt: req.body.recordedAt,
+        receivedAt: now,
+      };
+      const count = Number(session.validHeartbeatCount || 0) + 1;
+      await ref.set({
+        lastHeartbeat: heartbeat,
+        lastHeartbeatAt: now,
+        validHeartbeatCount: count,
+        speedKmh: heartbeat.speedKmh,
+        updatedAt: now,
+      }, { merge: true });
+      res.json({
+        accepted: true,
+        validHeartbeatCount: count,
+        rewardsEligible: true,
+        expiresAt: new Date(Date.parse(session.startedAt) + 3 * 60 * 60 * 1000)
+          .toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+app.post(
+  '/api/reward-attempts',
+  gameLimiter,
+  validate(rewardAttemptSchema),
+  async (req, res, next) => {
+    try {
+      const commute = await requireEligibleCommuteSession(req.clientId);
+      const attemptId = rewardAttemptId(
+        req.clientId,
+        commute.id,
+        req.body.activityType,
+        req.body.entityId,
+      );
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
+      await firestore.collection('metrosafar_reward_attempts').doc(attemptId).set({
+        id: attemptId,
+        userId: req.clientId,
+        commuteSessionId: commute.id,
+        activityType: req.body.activityType,
+        entityId: req.body.entityId,
+        status: 'issued',
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      }, { merge: true });
+      res.status(201).json({
+        attemptId,
+        commuteSessionId: commute.id,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commuteEndSchema), async (req, res, next) => {
   try {
     const ref = firestore.collection('metrosafar_commute_sessions').doc(req.params.sessionId);
@@ -2933,6 +3422,13 @@ app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commu
       });
       return;
     }
+    const endStation = req.body.endStationId
+      ? findSessionStation(session, req.body.endStationId)
+      : null;
+    const verifiedCompletion = hasVerifiedCompletionEvidence(
+      session,
+      stationCoordinates(endStation),
+    );
     const endedAt = new Date().toISOString();
     await ref.set({
       status: 'completed',
@@ -2941,23 +3437,31 @@ app.post('/api/trip/commute-session/:sessionId/end', tripLimiter, validate(commu
       updatedAt: endedAt,
       rewardsEligible: false,
       multiplier: 1,
+      verifiedCompletion,
     }, { merge: true });
 
-    await incrementWeeklyStats(req.clientId, {
-      tripsCompleted: 1,
-      co2Kg: 0.4,
-    }, { cityId: session.cityId }).catch((error) => logger.warn({ err: error, clientId: req.clientId }, 'Commute weekly end stats failed'));
+    if (verifiedCompletion) {
+      await incrementWeeklyStats(req.clientId, {
+        tripsCompleted: 1,
+        co2Kg: 0.4,
+      }, { cityId: session.cityId }).catch((error) => logger.warn({ err: error, clientId: req.clientId }, 'Commute weekly end stats failed'));
+    }
 
-    const referral = await qualifyReferralForUser(req.clientId, 'first_trip').catch((error) => {
-      logger.warn({ err: error, clientId: req.clientId }, 'Commute referral qualification failed');
-      return null;
-    });
+    const referral = verifiedCompletion
+      ? await qualifyReferralForUser(req.clientId, 'first_trip').catch((error) => {
+          logger.warn({ err: error, clientId: req.clientId }, 'Commute referral qualification failed');
+          return null;
+        })
+      : null;
 
     res.json({
       session: { id: ref.id, ...session, status: 'completed', endedAt },
       pointsAwarded: 0,
+      verifiedCompletion,
       referral,
-      summary: 'Commute complete. Activities during the session earned a 1.5x multiplier.',
+      summary: verifiedCompletion
+        ? 'Verified commute complete.'
+        : 'Ride ended, but completion could not be verified near the selected station.',
     });
   } catch (error) {
     next(error);

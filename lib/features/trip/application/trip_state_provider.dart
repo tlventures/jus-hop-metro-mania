@@ -211,6 +211,8 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
         );
         return;
       }
+      final verified =
+          _ref.read(commuteProvider.notifier).lastCompletionVerified;
       final outboxCount = await _backendService.outboxCount();
 
       state = state.copyWith(
@@ -218,7 +220,9 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
         clearActiveTrip: true,
         elapsed: Duration.zero,
         statusMessage:
-            'Ride complete. Points earned by verified activities are in your wallet.',
+            verified == true
+                ? 'Verified ride complete. Your activity points are in your wallet.'
+                : 'Ride ended, but the destination could not be verified.',
         outboxCount: outboxCount,
       );
     } catch (error) {

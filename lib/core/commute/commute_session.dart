@@ -7,15 +7,40 @@ class CommuteSignal {
   final double vibrationScore;
   final double? speedKmh;
   final MetroStation? station;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyMeters;
+  final DateTime? recordedAt;
+  final bool deviceTrusted;
 
   const CommuteSignal({
     required this.confidenceScore,
     required this.vibrationScore,
     this.speedKmh,
     this.station,
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.recordedAt,
+    this.deviceTrusted = false,
   });
 
   bool get isHighConfidence => confidenceScore >= 0.75;
+  bool get hasLocationEvidence =>
+      latitude != null &&
+      longitude != null &&
+      accuracyMeters != null &&
+      recordedAt != null &&
+      deviceTrusted;
+
+  Map<String, dynamic> toHeartbeatJson() => {
+    'lat': latitude,
+    'lng': longitude,
+    'accuracyMeters': accuracyMeters,
+    if (speedKmh != null) 'speedKmh': speedKmh,
+    'recordedAt': recordedAt?.toUtc().toIso8601String(),
+    'deviceTrusted': deviceTrusted,
+  };
 }
 
 class CommuteSessionState {
@@ -27,6 +52,8 @@ class CommuteSessionState {
   final MetroStation? station;
   final DateTime? startedAt;
   final bool rewardsEligible;
+  final DateTime? lastHeartbeatAt;
+  final int validHeartbeatCount;
   final String? error;
 
   const CommuteSessionState({
@@ -38,6 +65,8 @@ class CommuteSessionState {
     this.station,
     this.startedAt,
     this.rewardsEligible = false,
+    this.lastHeartbeatAt,
+    this.validHeartbeatCount = 0,
     this.error,
   });
 
@@ -55,6 +84,8 @@ class CommuteSessionState {
     MetroStation? station,
     DateTime? startedAt,
     bool? rewardsEligible,
+    DateTime? lastHeartbeatAt,
+    int? validHeartbeatCount,
     String? error,
   }) {
     return CommuteSessionState(
@@ -66,6 +97,8 @@ class CommuteSessionState {
       station: station ?? this.station,
       startedAt: startedAt ?? this.startedAt,
       rewardsEligible: rewardsEligible ?? this.rewardsEligible,
+      lastHeartbeatAt: lastHeartbeatAt ?? this.lastHeartbeatAt,
+      validHeartbeatCount: validHeartbeatCount ?? this.validHeartbeatCount,
       error: error,
     );
   }
