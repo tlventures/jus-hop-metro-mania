@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:safe_device/safe_device.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/backend_service.dart';
 import '../city/current_city_provider.dart';
@@ -13,7 +15,7 @@ import '../city/current_city_provider.dart';
 // State
 // ---------------------------------------------------------------------------
 
-enum RidePhase { idle, verifying, active, ending, summary }
+enum RidePhase { idle, verifying, awaitingNetwork, active, ending, summary }
 
 class RideSessionState {
   final RidePhase phase;
@@ -47,7 +49,6 @@ class RideSessionState {
   bool get isActive => phase == RidePhase.active;
   bool get hasRide => rideId != null && (phase == RidePhase.active || phase == RidePhase.ending);
 
-  /// Time remaining before the ride expires, or null if not active.
   Duration? get timeRemaining {
     if (expiresAt == null || phase != RidePhase.active) return null;
     final remaining = expiresAt!.difference(DateTime.now());
@@ -97,17 +98,57 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
   Timer? _heartbeatTimer;
   Timer? _elapsedTimer;
 
+  // Pending QR scan — retained for reconnect retry
+  String? _pendingQrToken;
+  String? _pendingCityId;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
+  // SharedPreferences key for persisting ride summary
+  static const String _summaryKey = 'ride_summary_pending';
+
   RideSessionNotifier(this._backend) : super(const RideSessionState());
 
   @override
   void dispose() {
     _stopTimers();
+    _connectivitySub?.cancel();
     super.dispose();
+  }
+
+  /// Stop the legacy trip heartbeat timer to avoid duplicate GPS polling.
+  /// Call this from TripModeNotifier when a new ride session becomes active.
+  void stopLegacyHeartbeat() {
+    // No-op here — the legacy provider owns its own timer.
+    // This method exists so TripModeNotifier can be called the other way around.
   }
 
   /// Restore an in-progress ride from the backend (called on app launch).
   Future<void> restore() async {
     try {
+      // Check for an unshown summary from a previous session first.
+      final prefs = await SharedPreferences.getInstance();
+      final uid = _backend.currentUid;
+      if (uid != null) {
+        final summaryJson = prefs.getString('${uid}_$_summaryKey');
+        if (summaryJson != null) {
+          try {
+            final summary = jsonDecode(summaryJson) as Map<String, dynamic>;
+            final savedAt = DateTime.tryParse(summary['savedAt'] as String? ?? '');
+            if (savedAt != null && DateTime.now().difference(savedAt).inHours < 24) {
+              state = state.copyWith(
+                phase: RidePhase.summary,
+                pointsEarned: (summary['pointsEarned'] as num?)?.toInt() ?? 0,
+                co2SavedKg: (summary['co2SavedKg'] as num?)?.toDouble() ?? 0.0,
+                stamps: (summary['stamps'] as List?)?.cast<String>() ?? [],
+                statusMessage: summary['statusMessage'] as String?,
+              );
+              return; // show the summary; dismissSummary() will clear it
+            }
+          } catch (_) {}
+          await prefs.remove('${uid}_$_summaryKey');
+        }
+      }
+
       final data = await _backend.getActiveRide();
       final ride = data['ride'] as Map<String, dynamic>?;
       if (ride != null) {
@@ -125,11 +166,15 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
     try {
       final data = await _backend.startRide(qrToken: qrToken, cityId: cityId);
       if (data['queued'] == true) {
-        // Network down — can't verify QR offline, roll back
+        // Network is down — retain the token and wait for reconnect.
+        _pendingQrToken = qrToken;
+        _pendingCityId = cityId;
         state = state.copyWith(
-          phase: RidePhase.idle,
-          error: 'No network connection — please scan when you have signal.',
+          phase: RidePhase.awaitingNetwork,
+          statusMessage: 'No connection — will start ride automatically when signal returns.',
+          clearError: true,
         );
+        _watchForReconnect();
         return;
       }
       final ride = data['ride'] as Map<String, dynamic>?;
@@ -137,14 +182,18 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
         state = state.copyWith(phase: RidePhase.idle, error: 'Could not start ride. Please try again.');
         return;
       }
+      _clearPendingQr();
       _applyRideDoc(ride);
       _startTimers(ride['id'] as String);
     } catch (e) {
-      state = state.copyWith(
-        phase: RidePhase.idle,
-        error: _friendlyError(e),
-      );
+      state = state.copyWith(phase: RidePhase.idle, error: _friendlyError(e));
     }
+  }
+
+  /// Cancel a pending offline QR scan.
+  void cancelPendingQr() {
+    _clearPendingQr();
+    state = state.copyWith(phase: RidePhase.idle, clearError: true, clearStatus: true);
   }
 
   /// End the active ride.
@@ -162,11 +211,17 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
       final String message;
       if (pts > 0) {
         message = 'Ride complete! +$pts pts earned.';
+      } else if (reason == 'cooldown') {
+        message = 'Ride complete! Points paused — please slow down.';
       } else {
         message = reason == 'insufficient_evidence'
             ? 'Ride complete! Enable location for points next time.'
             : 'Ride complete!';
       }
+
+      // Persist summary before showing it — survives a crash or backgrounding.
+      await _saveSummary(pts, co2, stamps, message);
+
       state = state.copyWith(
         phase: RidePhase.summary,
         clearRideId: true,
@@ -178,11 +233,12 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
       );
     } catch (e) {
       state = state.copyWith(phase: RidePhase.active, error: _friendlyError(e));
-      _startTimers(rideId); // restart timers — ride still active
+      _startTimers(rideId);
     }
   }
 
   void dismissSummary() {
+    _clearPersistedSummary();
     state = const RideSessionState();
   }
 
@@ -201,6 +257,7 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
       pointsEarned: 0,
       elapsed: Duration.zero,
       clearError: true,
+      clearStatus: true,
     );
   }
 
@@ -242,6 +299,58 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
     _elapsedTimer = null;
   }
 
+  void _watchForReconnect() {
+    _connectivitySub?.cancel();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) async {
+      final online = results.any((r) => r != ConnectivityResult.none);
+      if (!online || _pendingQrToken == null) return;
+      if (state.phase != RidePhase.awaitingNetwork) {
+        _clearPendingQr();
+        return;
+      }
+      // Reconnected — retry the scan once.
+      final token = _pendingQrToken!;
+      final cityId = _pendingCityId;
+      _clearPendingQr();
+      await startWithQr(token, cityId: cityId);
+    });
+  }
+
+  void _clearPendingQr() {
+    _pendingQrToken = null;
+    _pendingCityId = null;
+    _connectivitySub?.cancel();
+    _connectivitySub = null;
+  }
+
+  Future<void> _saveSummary(int pts, double co2, List<String> stamps, String message) async {
+    try {
+      final uid = _backend.currentUid;
+      if (uid == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('${uid}_$_summaryKey', jsonEncode({
+        'pointsEarned': pts,
+        'co2SavedKg': co2,
+        'stamps': stamps,
+        'statusMessage': message,
+        'savedAt': DateTime.now().toIso8601String(),
+      }));
+    } catch (e) {
+      debugPrint('RideSessionNotifier._saveSummary error: $e');
+    }
+  }
+
+  Future<void> _clearPersistedSummary() async {
+    try {
+      final uid = _backend.currentUid;
+      if (uid == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('${uid}_$_summaryKey');
+    } catch (e) {
+      debugPrint('RideSessionNotifier._clearPersistedSummary error: $e');
+    }
+  }
+
   String _friendlyError(Object e) {
     if (e is BackendHttpException) {
       try {
@@ -266,10 +375,16 @@ final rideSessionProvider =
       (ref) => RideSessionNotifier(BackendService()),
     );
 
-/// Auto-restore ride on app start (watch this in your root widget or provider).
+/// Auto-restore ride on app start.
+/// Uses ref.listen so restore fires exactly once when the city transitions
+/// from null to a loaded value — avoids the race where city loads after
+/// the provider initialises and restore is never called.
 final rideRestoreProvider = Provider<void>((ref) {
-  final city = ref.watch(activeCityProvider);
-  if (city != null) {
-    Future.microtask(() => ref.read(rideSessionProvider.notifier).restore());
-  }
+  bool restored = false;
+  ref.listen(activeCityProvider, (_, city) {
+    if (city != null && !restored) {
+      restored = true;
+      Future.microtask(() => ref.read(rideSessionProvider.notifier).restore());
+    }
+  });
 });

@@ -55,32 +55,40 @@ const EPISODE_METADATA = [
   },
 ];
 
+// Expanded bank: events randomly sample QUESTIONS_PER_EVENT from this pool so
+// answers can't be memorised after one session. Add more questions here as needed.
 const EVENT_QUESTION_BANK = [
-  {
-    id: 'q_1',
-    prompt: 'Which station is a major interchange between Red and Blue lines?',
-    options: ['Miyapur', 'Ameerpet', 'Raidurg', 'Uppal'],
-    correctIndex: 1,
-    pointsBase: 20,
-    pointsBonusPerSecondRemaining: 2,
-  },
-  {
-    id: 'q_2',
-    prompt: 'What is the best app behavior in a tunnel?',
-    options: ['Stop working', 'Use cached content', 'Force GPS', 'Clear wallet'],
-    correctIndex: 1,
-    pointsBase: 20,
-    pointsBonusPerSecondRemaining: 2,
-  },
-  {
-    id: 'q_3',
-    prompt: 'Which action should require explicit user consent?',
-    options: ['Viewing points', 'Background location', 'Reading articles', 'Opening profile'],
-    correctIndex: 1,
-    pointsBase: 20,
-    pointsBonusPerSecondRemaining: 2,
-  },
+  { id: 'q_1',  prompt: 'Which station is a major interchange between Red and Blue lines?',       options: ['Miyapur', 'Ameerpet', 'Raidurg', 'Uppal'],                                           correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_2',  prompt: 'What is the best app behavior in a tunnel?',                              options: ['Stop working', 'Use cached content', 'Force GPS', 'Clear wallet'],                   correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_3',  prompt: 'Which action requires explicit user consent?',                            options: ['Viewing points', 'Background location', 'Reading articles', 'Opening profile'],       correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_4',  prompt: 'How many metro lines does Hyderabad Metro currently operate?',            options: ['1', '2', '3', '4'],                                                                   correctIndex: 2, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_5',  prompt: 'Which Hyderabad Metro line connects Miyapur to LB Nagar?',               options: ['Red Line', 'Blue Line', 'Green Line', 'Yellow Line'],                                 correctIndex: 0, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_6',  prompt: 'What does CO₂ saved in the app represent?',                              options: ['Speed of trains', 'Emissions avoided by choosing metro', 'Battery usage', 'Data saved'], correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_7',  prompt: 'Which station connects the Blue and Green metro lines?',                  options: ['Ameerpet', 'Nagole', 'MGBS', 'Paradise'],                                             correctIndex: 0, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_8',  prompt: 'What is the minimum age to create a MetroSafar account without parental consent?', options: ['13', '16', '18', '21'],                                                    correctIndex: 2, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_9',  prompt: 'What does a QR code at a metro station allow you to do in MetroSafar?',  options: ['Pay fare', 'Start a ride session', 'Unlock a game', 'Share location'],                correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_10', prompt: 'Which line serves Hyderabad Airport from Raidurg?',                      options: ['Red Line', 'Blue Line', 'Green Line', 'Purple Line'],                                 correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_11', prompt: 'How often do heartbeats send your location during an active ride?',       options: ['Every 10 seconds', 'Every 30 seconds', 'Every 60 seconds', 'Every 5 minutes'],       correctIndex: 2, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_12', prompt: 'What happens to your streak if you miss a day?',                         options: ['Paused', 'Reset to 1', 'Stays the same', 'Doubled next day'],                         correctIndex: 1, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_13', prompt: 'Which terminal is served by Rajiv Gandhi International Airport metro?',  options: ['RGIA North', 'RGIA South', 'RGIA domestic only', 'RGIA T1 and T2'],                   correctIndex: 3, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_14', prompt: 'What is the daily point cap in MetroSafar?',                             options: ['200', '300', '400', '500'],                                                           correctIndex: 3, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
+  { id: 'q_15', prompt: 'Which data law governs personal data handling in MetroSafar for Indian users?', options: ['GDPR', 'CCPA', 'DPDPA', 'IT Act 2000'],                                      correctIndex: 2, pointsBase: 20, pointsBonusPerSecondRemaining: 2 },
 ];
+const QUESTIONS_PER_EVENT = 3;
+
+// Returns a deterministic-per-event sample from the bank so the same event ID
+// always produces the same questions (replay-safe) but different events differ.
+function sampleQuestionsForEvent(eventId) {
+  // Simple seeded shuffle: hash eventId to get an offset, then pick consecutive.
+  let seed = 0;
+  for (let i = 0; i < eventId.length; i++) seed = (seed * 31 + eventId.charCodeAt(i)) >>> 0;
+  const offset = seed % EVENT_QUESTION_BANK.length;
+  const result = [];
+  for (let i = 0; i < QUESTIONS_PER_EVENT; i++) {
+    result.push(EVENT_QUESTION_BANK[(offset + i) % EVENT_QUESTION_BANK.length]);
+  }
+  return result;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -423,22 +431,50 @@ async function endTrip(context, clientId, tripId, body = {}) {
     completedAt,
   }, { merge: true });
 
-  const user = await context.getUserState(clientId);
-  await context.saveUserState(clientId, {
-    ...user,
-    activeTripId: null,
-    points: Number(user.points || 0) + pointsAwarded,
-    tripSummary: {
-      totalTrips: Number(user.tripSummary?.totalTrips || 0) + 1,
-      totalKm: Number((Number(user.tripSummary?.totalKm || 0) + hops * 1.15).toFixed(2)),
-      totalCo2Kg: Number((Number(user.tripSummary?.totalCo2Kg || 0) + co2SavedKg).toFixed(2)),
-      mostVisitedStation: endStation?.name || user.tripSummary?.mostVisitedStation || null,
-      lastUpdated: nowIso(),
-    },
-  });
+  // Route point award through claimTransaction so the 500/day cap applies and
+  // concurrent end calls can't double-credit.
+  const DAILY_CAP = 500;
+  let grantedPoints = 0;
+  if (pointsAwarded > 0) {
+    grantedPoints = await context.claimTransaction(clientId, async (_txn, state) => {
+      const isNewDay = !state.lastDailyEarnDate ||
+        new Date(state.lastDailyEarnDate).toDateString() !== new Date().toDateString();
+      const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
+      const granted = Math.min(pointsAwarded, Math.max(0, DAILY_CAP - currentDailyEarned));
+      const next = {
+        ...state,
+        activeTripId: null,
+        points: (state.points || 0) + granted,
+        dailyPointsEarned: currentDailyEarned + granted,
+        lastDailyEarnDate: granted > 0 ? new Date().toISOString() : state.lastDailyEarnDate,
+        tripSummary: {
+          totalTrips: (state.tripSummary?.totalTrips || 0) + 1,
+          totalKm: Number(((state.tripSummary?.totalKm || 0) + hops * 1.15).toFixed(2)),
+          totalCo2Kg: Number(((state.tripSummary?.totalCo2Kg || 0) + co2SavedKg).toFixed(2)),
+          mostVisitedStation: endStation?.name || state.tripSummary?.mostVisitedStation || null,
+          lastUpdated: nowIso(),
+        },
+      };
+      return { next, response: granted };
+    });
+  } else {
+    // Still clear activeTripId and update summary even with 0 points.
+    const user = await context.getUserState(clientId);
+    await context.saveUserState(clientId, {
+      ...user,
+      activeTripId: null,
+      tripSummary: {
+        totalTrips: (user.tripSummary?.totalTrips || 0) + 1,
+        totalKm: Number(((user.tripSummary?.totalKm || 0) + hops * 1.15).toFixed(2)),
+        totalCo2Kg: Number(((user.tripSummary?.totalCo2Kg || 0) + co2SavedKg).toFixed(2)),
+        mostVisitedStation: endStation?.name || user.tripSummary?.mostVisitedStation || null,
+        lastUpdated: nowIso(),
+      },
+    });
+  }
 
   return {
-    pointsAwarded,
+    pointsAwarded: grantedPoints,
     stampsEarned,
     co2SavedKg,
     returnTripSuggestion,
@@ -818,6 +854,14 @@ function installPhase56Middleware(app, context) {
 
 function installPhase56Routes(app, context) {
   app.post('/api/trips/start', async (req, res, next) => {
+    // Retire the no-QR legacy trip path once new-client adoption is high enough.
+    // Set LEGACY_TRIPS=on to keep it open during the transition period.
+    if (process.env.LEGACY_TRIPS !== 'on') {
+      return res.status(410).json({
+        error: 'Please update the app to start a ride.',
+        code: 'legacy_trips_retired',
+      });
+    }
     try {
       res.json(await startTrip(context, req.clientId, req.body));
     } catch (error) {
@@ -826,6 +870,9 @@ function installPhase56Routes(app, context) {
   });
 
   app.post('/api/trips/:tripId/heartbeat', async (req, res, next) => {
+    if (process.env.LEGACY_TRIPS !== 'on') {
+      return res.status(410).json({ error: 'Please update the app.', code: 'legacy_trips_retired' });
+    }
     try {
       res.json(await updateTripHeartbeat(context, req.clientId, req.params.tripId, req.body));
     } catch (error) {
@@ -1272,7 +1319,7 @@ function installPhase56Routes(app, context) {
     }
     res.json({
       event,
-      questions: event.type === 'trivia' ? EVENT_QUESTION_BANK.map(({ correctIndex, ...safe }) => safe) : [],
+      questions: event.type === 'trivia' ? sampleQuestionsForEvent(event.id).map(({ correctIndex, ...safe }) => safe) : [],
       serverTimeMs: Date.now(),
     });
   });
@@ -1307,7 +1354,9 @@ function installPhase56Routes(app, context) {
 
   app.post('/api/events/:id/submit', async (req, res, next) => {
     try {
-      const question = EVENT_QUESTION_BANK.find((item) => item.id === req.body.questionId);
+      const event = buildEventSchedule().find((item) => item.id === req.params.id);
+      const eventQuestions = event ? sampleQuestionsForEvent(event.id) : EVENT_QUESTION_BANK;
+      const question = eventQuestions.find((item) => item.id === req.body.questionId);
       if (!question) {
         res.status(404).json({ error: 'Question not found' });
         return;

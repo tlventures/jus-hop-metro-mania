@@ -333,7 +333,7 @@ const commuteEndSchema = z.object({
 const activityEventSchema = z.object({
   type: z.string().min(1).max(80),
   entityId: z.string().max(120).optional().nullable(),
-  metadata: z.object({ points: z.number().int().min(0).max(1000).optional() }).optional(),
+  metadata: z.object({}).passthrough().optional(),
 });
 
 const surveySubmitSchema = z.object({
@@ -489,6 +489,7 @@ function defaultUserState(clientId, firebaseUser = null) {
     readArticleIds: [],
     completedSurveys: [],
     completedStories: [],
+    claimedActivityKeys: [],
     lastUpdated: new Date().toISOString(),
   });
 }
@@ -1006,26 +1007,57 @@ async function addWalletTransaction(clientId, state, type, pointsAwarded, descri
  * (not banned automatically to avoid false positives).
  */
 async function checkRideCadenceAnomaly(clientId) {
-  const MIN_RIDE_GAP_MINUTES = 3;
-  const windowStart = new Date(Date.now() - MIN_RIDE_GAP_MINUTES * 60 * 1000).toISOString();
-  const recentSnap = await firestore.collection('metrosafar_users').doc(clientId)
-    .collection('activity_events')
-    .where('type', '==', 'ride_completed')
-    .where('createdAt', '>=', windowStart)
+  const ANOMALY_WINDOW_MS = 30 * 60 * 1000;    // 30-minute sliding window
+  const ANOMALY_THRESHOLD = 3;                  // flags before cooldown kicks in
+  const COOLDOWN_MINUTES = 30;
+
+  const userRef = firestore.collection('metrosafar_users').doc(clientId);
+  const userSnap = await userRef.get();
+  const userData = userSnap.exists ? userSnap.data() : {};
+
+  const now = Date.now();
+  const windowStart = new Date(now - ANOMALY_WINDOW_MS).toISOString();
+
+  // Count recent rapid completions via the rides subcollection (new system).
+  const recentSnap = await firestore.collection('metrosafar_rides')
+    .where('userId', '==', clientId)
+    .where('status', '==', 'completed')
+    .where('completedAt', '>=', windowStart)
     .count()
     .get();
   const recentCount = recentSnap.data().count;
-  if (recentCount >= 2) {
-    await firestore.collection('metrosafar_flagged_trips').add({
-      userId: clientId,
-      reason: 'cadence_anomaly',
-      recentRideCount: recentCount,
-      windowMinutes: MIN_RIDE_GAP_MINUTES,
-      flaggedAt: new Date().toISOString(),
-      reviewed: false,
-    });
-    logger.warn({ clientId, recentCount }, 'Ride cadence anomaly flagged');
+
+  if (recentCount < 2) return;
+
+  // Tally how many anomalies have been recorded in this window.
+  const anomalyWindowStart = userData.rideAnomalyWindowStart
+    ? new Date(userData.rideAnomalyWindowStart).getTime()
+    : 0;
+  const inWindow = (now - anomalyWindowStart) < ANOMALY_WINDOW_MS;
+  const anomalyCount = inWindow ? (userData.rideAnomalyCount || 0) + 1 : 1;
+
+  const updates = {
+    rideAnomalyCount: anomalyCount,
+    rideAnomalyWindowStart: inWindow ? userData.rideAnomalyWindowStart : new Date().toISOString(),
+  };
+
+  if (anomalyCount >= ANOMALY_THRESHOLD) {
+    updates.rideCooldownUntil = new Date(now + COOLDOWN_MINUTES * 60 * 1000).toISOString();
+    logger.warn({ clientId, anomalyCount }, 'Ride cadence anomaly: cooldown applied');
   }
+
+  await userRef.set(updates, { merge: true });
+
+  await firestore.collection('metrosafar_flagged_trips').add({
+    userId: clientId,
+    reason: 'cadence_anomaly',
+    recentRideCount: recentCount,
+    anomalyCount,
+    windowMinutes: ANOMALY_WINDOW_MS / 60000,
+    flaggedAt: new Date().toISOString(),
+    reviewed: false,
+  });
+  logger.warn({ clientId, recentCount, anomalyCount }, 'Ride cadence anomaly flagged');
 }
 
 async function qualifyReferralForUser(clientId, trigger) {
@@ -1700,11 +1732,20 @@ const GAME_REWARDED_PLAYS_PER_DAY = 3;
 // Points awarded when playing outside a fresh ride session.
 const GAME_POINTS_OUTSIDE_TRANSIT = 5;
 
+const GAME_SCORE_MAX = { daily_spin: 1000, trivia: 5000, sudoku: 5000, word_puzzle: 5000, city_explorer: 5000 };
+const MIN_GAME_SECONDS = { trivia: 10, sudoku: 30, word_puzzle: 20, city_explorer: 15, daily_spin: 0 };
+
 app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema), async (req, res, next) => {
   try {
     const validGames = ['daily_spin', 'trivia', 'sudoku', 'word_puzzle', 'city_explorer'];
     if (!validGames.includes(req.params.gameId)) {
       res.status(404).json({ error: 'Game not found' }); return;
+    }
+
+    // Reject implausibly fast completions (timeSpent is client-supplied but raises the bar).
+    const minSecs = MIN_GAME_SECONDS[req.params.gameId] ?? 0;
+    if (minSecs > 0 && (Number(req.body.timeSpent) || 0) < minSecs) {
+      res.status(400).json({ error: 'Game completed too quickly', reason: 'too_fast' }); return;
     }
 
     const commute = await maybeGetCommuteMultiplier(req.clientId);
@@ -1735,10 +1776,12 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
       const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
       const dailyCapReached = currentDailyEarned >= DAILY_POINT_CAP;
 
-      // Score is stored for leaderboards but does not determine points
+      // Score is stored for leaderboards but does not determine points.
+      // Clamp to a per-game max so leaderboards can't be gamed with inflated values.
       const gameScores = state.gameScores || {};
       const current = gameScores[req.params.gameId] || { score: 0, completions: 0 };
-      const newScore = Math.max(current.score, Number(req.body.score) || 0);
+      const submitted = Math.min(Math.max(0, Number(req.body.score) || 0), GAME_SCORE_MAX[req.params.gameId] || 5000);
+      const newScore = Math.max(current.score, submitted);
 
       let pointsEarned = 0;
       let reason = null;
@@ -1820,12 +1863,17 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
       const newLongest = Math.max(state.longestStreak || 0, newDay);
 
       // Streak always advances for calendar purposes; points require a ride that day.
+      // A single streak claim is capped at STREAK_DAILY_BONUS_CAP and also counts toward
+      // the 500/day overall cap so long streaks cannot bypass the daily limit.
+      const STREAK_DAILY_BONUS_CAP = 100;
       const lastRideAt = state.lastRideCompletedAt ? istDayString(new Date(state.lastRideCompletedAt)) : null;
       const hadRideToday = lastRideAt === todayIst;
-      const pointsEarned = hadRideToday ? 5 * newDay : 0;
+      const requested = hadRideToday ? Math.min(5 * newDay, STREAK_DAILY_BONUS_CAP) : 0;
+      const award = awardCapped(state, requested, now);
+      const pointsEarned = award.awarded;
       const next = {
         ...state,
-        points: state.points + pointsEarned,
+        ...award.fields,
         streakDay: newDay,
         longestStreak: newLongest,
         lastStreakClaimAt: now.toISOString(),
@@ -1836,9 +1884,10 @@ app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
           streakDay: newDay,
           longestStreak: newLongest,
           pointsEarned,
-          reason: hadRideToday ? null : 'no_ride_today',
+          reason: hadRideToday ? (award.capReached ? 'daily_cap_reached' : null) : 'no_ride_today',
           totalPoints: next.points,
           reset: !continuing,
+          dailyCapped: award.capReached,
         },
       };
     });
@@ -2089,17 +2138,39 @@ app.post('/api/stories/:storyId/complete', contentLimiter, validate(storyComplet
 // ride_started / ride_completed removed — points are awarded inside endRide (rides.js)
 // to prevent the double-award pattern. These types are no longer accepted here.
 const ACTIVITY_POINT_RULES = {
-  game_completed:         { base: 20, max: 50 },
-  quest_completed:        { base: 20, max: 30 },
-  article_read:           { base: 15, max: 15 },
-  survey_submitted:       { base: 20, max: 20 },
-  story_completed:        { base: 25, max: 25 },
-  stamp_claimed:          { base: 10, max: 15 },
-  station_quiz_completed: { base: 25, max: 25 },
-  passport_viewed:        { base: 10, max: 10 },
+  // game_completed removed — use POST /api/games/:id/complete which has its own per-game cap
+  quest_completed:        { base: 20 },
+  article_read:           { base: 15 },
+  survey_submitted:       { base: 20 },
+  story_completed:        { base: 25 },
+  stamp_claimed:          { base: 10 },
+  station_quiz_completed: { base: 25 },
+  passport_viewed:        { base: 10 },
 };
 const DAILY_POINT_CAP = 500;
 const TOP_N = 50; // max leaderboard entries served to clients
+
+// Single source of truth for awarding points under the 500/day cap.
+// Every earning path MUST go through this so the cap cannot leak.
+// Pure function: takes current user state + requested points, returns
+// how many were actually granted and the state fields to merge.
+function awardCapped(state, requested, now = new Date()) {
+  const isNewDay = !state.lastDailyEarnDate ||
+    new Date(state.lastDailyEarnDate).toDateString() !== now.toDateString();
+  const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
+  const remaining = Math.max(0, DAILY_POINT_CAP - currentDailyEarned);
+  const awarded = Math.min(Math.max(0, Math.round(requested || 0)), remaining);
+  return {
+    awarded,
+    capReached: remaining === 0,
+    dailyEarned: currentDailyEarned + awarded,
+    fields: {
+      points: (state.points || 0) + awarded,
+      dailyPointsEarned: currentDailyEarned + awarded,
+      lastDailyEarnDate: awarded > 0 ? now.toISOString() : state.lastDailyEarnDate,
+    },
+  };
+}
 
 function activityDescription(type, entityId) {
   const labels = {
@@ -2143,43 +2214,46 @@ app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), 
 
     const commute = await maybeGetCommuteMultiplier(req.clientId);
     const response = await claimTransaction(req.clientId, async (txn, state) => {
-      const today = new Date().toDateString();
-      const isNewDay = !state.lastDailyEarnDate || new Date(state.lastDailyEarnDate).toDateString() !== today;
-      const currentDailyEarned = isNewDay ? 0 : (state.dailyPointsEarned || 0);
+      const rule = ACTIVITY_POINT_RULES[type];
 
-      if (currentDailyEarned >= DAILY_POINT_CAP) {
-        return {
-          next: null,
-          response: { pointsAwarded: 0, reason: 'daily_cap_reached', totalPoints: state.points, dailyEarned: currentDailyEarned, dailyCap: DAILY_POINT_CAP },
-        };
+      // Per-entityId dedup for repeatable types that don't have their own endpoint.
+      const DEDUP_TYPES = new Set(['stamp_claimed', 'station_quiz_completed', 'passport_viewed']);
+      const claimedKey = (DEDUP_TYPES.has(type) && entityId) ? `${type}:${entityId}` : null;
+      const claimedSet = new Set(state.claimedActivityKeys || []);
+      if (claimedKey && claimedSet.has(claimedKey)) {
+        return { next: null, response: { pointsAwarded: 0, reason: 'already_claimed', totalPoints: state.points } };
       }
 
-      const rule = ACTIVITY_POINT_RULES[type];
-      const requested = metadata?.points ? Math.min(Number(metadata.points), rule.max) : rule.base;
-      const boosted = Math.round(requested * commute.multiplier);
-      const pointsAwarded = Math.min(boosted, DAILY_POINT_CAP - currentDailyEarned);
+      const boosted = Math.round(rule.base * commute.multiplier);
+      const now = new Date();
+      const award = awardCapped(state, boosted, now);
+
+      if (award.awarded === 0 && award.capReached) {
+        return { next: null, response: { pointsAwarded: 0, reason: 'daily_cap_reached', totalPoints: state.points, dailyEarned: award.dailyEarned, dailyCap: DAILY_POINT_CAP } };
+      }
+
+      if (claimedKey) claimedSet.add(claimedKey);
       const txnId = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const txnRecord = {
-        id: txnId, type, entityId: entityId || null, pointsAwarded,
-        description: activityDescription(type, entityId), createdAt: new Date().toISOString(),
+        id: txnId, type, entityId: entityId || null, pointsAwarded: award.awarded,
+        description: activityDescription(type, entityId), createdAt: now.toISOString(),
       };
       const transactions = [txnRecord, ...(state.walletTransactions || [])].slice(0, 100);
       const next = {
         ...state,
-        points: state.points + pointsAwarded,
-        dailyPointsEarned: currentDailyEarned + pointsAwarded,
-        lastDailyEarnDate: new Date().toISOString(),
+        ...award.fields,
+        claimedActivityKeys: [...claimedSet].slice(-500),
         walletTransactions: transactions,
       };
       return {
         next,
         response: {
           transactionId: txnId,
-          pointsAwarded,
+          pointsAwarded: award.awarded,
           commuteMultiplier: commute.multiplier,
           commuteSessionId: commute.session?.id || null,
           totalPoints: next.points,
-          dailyEarned: currentDailyEarned + pointsAwarded,
+          dailyEarned: award.dailyEarned,
           dailyCap: DAILY_POINT_CAP,
         },
       };
@@ -2322,8 +2396,8 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
       return res.status(200).send('OK'); // already awarded
     }
 
-    // Award using the same daily-cap logic as the existing watch-ad endpoint.
-    const amount = Number(reward_amount) || AD_REWARD_POINTS;
+    // Clamp reward_amount: never trust the AdMob console value beyond our configured ceiling.
+    const amount = Math.min(Number(reward_amount) || AD_REWARD_POINTS, AD_REWARD_POINTS);
     await claimTransaction(user_id, async (txn, state) => {
       const today = new Date().toDateString();
       const isNewDay = state.adWatchDate !== today;
@@ -2331,14 +2405,31 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
       if (watchesToday >= AD_REWARD_DAILY_LIMIT) {
         return { next: null, response: { capped: true } };
       }
-      const questPointsEarned = completeDailyQuestOnce(state, 'watch_video') ? 15 : 0;
+
+      // Route ad points through the shared 500/day cap.
+      const now = new Date();
+      const adAward = awardCapped(state, amount, now);
+
+      // One-per-day watch_video quest bonus, also through the cap.
+      const completed = new Set(state.completedQuests || []);
+      let questBonus = 0;
+      if (!completed.has('watch_video') && QUEST_POINTS['watch_video']) {
+        const qAward = awardCapped({ ...state, ...adAward.fields }, QUEST_POINTS['watch_video'], now);
+        questBonus = qAward.awarded;
+        if (questBonus > 0) {
+          completed.add('watch_video');
+          adAward.fields = qAward.fields;
+        }
+      }
+
       const next = {
         ...state,
-        points: state.points + amount + questPointsEarned,
+        ...adAward.fields,
         adWatchesToday: watchesToday + 1,
         adWatchDate: today,
+        completedQuests: [...completed],
       };
-      return { next, response: { pointsAwarded: amount + questPointsEarned } };
+      return { next, response: { pointsAwarded: adAward.awarded + questBonus } };
     });
 
     // Record for idempotency.

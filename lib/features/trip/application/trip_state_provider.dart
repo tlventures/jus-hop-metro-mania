@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/backend_service.dart';
+import 'package:metrosafar/core/ride/ride_session_provider.dart';
 
 class TripModeState {
   final bool isLoading;
@@ -67,10 +68,11 @@ class TripModeState {
 
 class TripModeNotifier extends StateNotifier<TripModeState> {
   final BackendService _backendService;
+  final Ref _ref;
   Timer? _elapsedTimer;
   Timer? _heartbeatTimer;
 
-  TripModeNotifier(this._backendService) : super(const TripModeState());
+  TripModeNotifier(this._backendService, this._ref) : super(const TripModeState());
 
   @override
   void dispose() {
@@ -202,6 +204,10 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       if (tripId.isEmpty) return;
+      // If the new ride system has an active ride, skip the legacy heartbeat
+      // to avoid double GPS polling and duplicate Firestore writes.
+      final newRide = _ref.read(rideSessionProvider);
+      if (newRide.isActive) return;
       try {
         // Try to send real GPS; fall back to clientTimeMs-only on error.
         final position = await Geolocator.getCurrentPosition(
@@ -232,5 +238,5 @@ class TripModeNotifier extends StateNotifier<TripModeState> {
 }
 
 final tripModeProvider = StateNotifierProvider<TripModeNotifier, TripModeState>(
-  (ref) => TripModeNotifier(BackendService()),
+  (ref) => TripModeNotifier(BackendService(), ref),
 );

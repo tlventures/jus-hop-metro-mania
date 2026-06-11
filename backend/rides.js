@@ -313,6 +313,12 @@ function installRideRoutes(app, context) {
         return res.status(400).json({ error: 'Ride expired — too much time has passed', reason: 'expired' });
       }
 
+      // Cadence cooldown: if the user has been flagged ≥3 times in 30 min, block point awards
+      // for COOLDOWN_MINUTES. They can still end the ride, but points are 0.
+      const userSnap = await firestore.collection('metrosafar_users').doc(req.clientId).get();
+      const userData = userSnap.exists ? userSnap.data() : {};
+      const inCooldown = userData.rideCooldownUntil && new Date(userData.rideCooldownUntil).getTime() > Date.now();
+
       // Require minimum plausible heartbeats spanning MIN_RIDE_DURATION_MS
       const plausibleBeats = (ride.heartbeats || []).filter((b) => !b.implausible && !b.mockLocation);
       const hasEvidence = plausibleBeats.length >= MIN_PLAUSIBLE_BEATS;
@@ -353,7 +359,7 @@ function installRideRoutes(app, context) {
         if (si >= 0 && ei >= 0) hops = Math.max(1, Math.abs(ei - si));
       }
 
-      const pointsAwarded = earns ? Math.min(80, 10 + hops * 4) : 0;
+      const pointsAwarded = (earns && !inCooldown) ? Math.min(80, 10 + hops * 4) : 0;
       const co2SavedKg    = Number((hops * 0.18).toFixed(2));
       const stamps        = endStation ? [endStation.id] : [];
       const completedAt   = nowIso(); // server time only
@@ -422,14 +428,14 @@ function installRideRoutes(app, context) {
         checkRideCadenceAnomaly(req.clientId),
       ]).catch((err) => logger.warn({ err, clientId: req.clientId }, 'ride end hooks failed'));
 
-      logger.info({ clientId: req.clientId, rideId, pointsAwarded, earns }, 'ride completed');
+      logger.info({ clientId: req.clientId, rideId, pointsAwarded, earns, inCooldown }, 'ride completed');
       return res.json({
         rideId,
         pointsAwarded,
         co2SavedKg,
         stamps,
         endStationName: endStation?.name || null,
-        reason: earns ? null : (hasEvidence ? 'insufficient_duration' : 'insufficient_evidence'),
+        reason: inCooldown ? 'cooldown' : (earns ? null : (hasEvidence ? 'insufficient_duration' : 'insufficient_evidence')),
         completedAt,
       });
     } catch (err) {

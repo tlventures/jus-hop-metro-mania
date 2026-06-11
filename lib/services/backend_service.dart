@@ -49,6 +49,9 @@ class BackendService {
 
   BackendService({http.Client? client}) : _client = client ?? http.Client();
 
+  /// The current Firebase UID, or null if not signed in.
+  String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
   Uri _uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
 
   String _newRequestId() {
