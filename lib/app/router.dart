@@ -20,6 +20,7 @@ import '../features/learn/presentation/learn_hub_screen.dart';
 import '../features/booking/presentation/booking_coming_soon_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
+import '../features/auth/presentation/phone_verify_screen.dart';
 import '../features/audio/presentation/audio_stories_screen.dart';
 import '../features/events/presentation/events_screen.dart';
 import '../features/intelligence/presentation/journey_planner_screen.dart';
@@ -90,6 +91,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const OnboardingScreen(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/verify-phone',
+      builder: (context, state) => const PhoneVerifyScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) {
         final selectedIndex = _getSelectedIndex(state.fullPath ?? '/home');

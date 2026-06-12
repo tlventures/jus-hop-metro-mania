@@ -1,6 +1,6 @@
 import '../../models/metro_station.dart';
 
-enum CommutePhase { idle, detecting, confirmed, active, ending }
+enum CommutePhase { idle, detecting, confirmed, verifying, active, ending }
 
 class CommuteSignal {
   final double confidenceScore;
@@ -40,8 +40,11 @@ class CommuteSessionState {
   });
 
   bool get isVisible =>
-      phase == CommutePhase.confirmed || phase == CommutePhase.active;
+      phase == CommutePhase.confirmed ||
+      phase == CommutePhase.verifying ||
+      phase == CommutePhase.active;
   bool get isActive => phase == CommutePhase.active;
+  bool get isVerifying => phase == CommutePhase.verifying;
 
   CommuteSessionState copyWith({
     CommutePhase? phase,

@@ -11,6 +11,7 @@ import '../../learn/application/articles_provider.dart';
 import '../../learn/application/surveys_provider.dart';
 import '../../learn/application/stories_provider.dart';
 import '../../home/application/streak_provider.dart';
+import '../../auth/application/phone_verification_provider.dart';
 import '../../../services/backend_service.dart';
 import '../../../services/user_display_name.dart';
 
@@ -78,6 +79,39 @@ class ProfileScreen extends ConsumerWidget {
                       );
                     },
                   ),
+                  // Earning is server-gated on a verified phone — give users
+                  // who skipped during signup a way back in.
+                  if (ref.watch(phoneVerifiedProvider).valueOrNull == false) ...[
+                    const SizedBox(height: AppSpacing.s4),
+                    GestureDetector(
+                      onTap: () => context.push('/verify-phone'),
+                      child: Container(
+                        padding: const EdgeInsets.all(AppSpacing.s4),
+                        decoration: BoxDecoration(
+                          color: colorScheme.tertiaryContainer,
+                          borderRadius: AppRadius.borderRadiusL,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.verified_user_outlined,
+                                color: colorScheme.onTertiaryContainer),
+                            const SizedBox(width: AppSpacing.s4),
+                            Expanded(
+                              child: Text(
+                                'Verify your phone number to unlock earning',
+                                style: AppTypography.labelLarge.copyWith(
+                                  color: colorScheme.onTertiaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Icon(Icons.chevron_right,
+                                color: colorScheme.onTertiaryContainer),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.s6),
                   Text('Your Activity',
                       style: AppTypography.titleMedium.copyWith(color: colorScheme.onSurface)),

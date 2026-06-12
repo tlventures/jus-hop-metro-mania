@@ -23,6 +23,10 @@ const crypto = require('crypto');
 const SECRET = process.env.QR_HMAC_SECRET || '';
 const ROTATION_HOURS = Math.max(1, Number(process.env.QR_TOKEN_ROTATION_HOURS) || 24);
 
+if (!SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('QR_HMAC_SECRET env var is required in production. Generate with: openssl rand -hex 32');
+}
+
 function _bucket() {
   return Math.floor(Date.now() / (ROTATION_HOURS * 3600 * 1000));
 }
@@ -72,8 +76,10 @@ function validateStationToken(token) {
     return { valid: false, reason: 'malformed' };
   }
   const now = _bucket();
-  // Accept current and one previous bucket (grace window).
-  if (bucket !== now && bucket !== now - 1) {
+  const bucketMs = ROTATION_HOURS * 3600 * 1000;
+  // Accept previous bucket only within a 10-minute grace window at rotation boundaries.
+  const inGrace = bucket === now - 1 && (Date.now() % bucketMs) < 10 * 60 * 1000;
+  if (bucket !== now && !inGrace) {
     return { valid: false, reason: 'expired' };
   }
   if (_sig(stationId, bucket) !== sig) {

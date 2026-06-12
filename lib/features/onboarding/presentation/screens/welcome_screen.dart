@@ -41,48 +41,58 @@ class WelcomeScreen extends StatelessWidget {
               final headlineSize = (width * 0.11).clamp(32.0, 56.0).toDouble();
               final isWide = width > 600;
 
+              // Overflow-proof layout: no IntrinsicHeight/Spacer (their
+              // intrinsic-height math can disagree with real layout and clip
+              // on short screens). The column is forced to at least the
+              // viewport height and spaceBetween distributes any extra space
+              // between the header, hero, and buttons; when content is taller
+              // than the screen it simply scrolls.
               return SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Center(
-                      child: ConstrainedBox(
-                        // Cap content width on tablets / foldables / notepads.
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child: Padding(
-                          padding: EdgeInsets.all(
-                            isWide ? AppSpacing.s8 : AppSpacing.s6,
+                child: Center(
+                  child: ConstrainedBox(
+                    // Cap content width on tablets / foldables / notepads.
+                    constraints: BoxConstraints(
+                      maxWidth: 560,
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(
+                        isWide ? AppSpacing.s8 : AppSpacing.s6,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const MetroSafarLogo(size: 48, elevated: false),
+                              const SizedBox(width: AppSpacing.s3),
+                              Expanded(
+                                child: Text(
+                                  'MetroSafar',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.titleLarge.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: onSkip,
+                                child: Text(
+                                  'Skip',
+                                  style: AppTypography.labelLarge.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.86),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Column(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  const MetroSafarLogo(size: 48, elevated: false),
-                                  const SizedBox(width: AppSpacing.s3),
-                                  Text(
-                                    'MetroSafar',
-                                    style: AppTypography.titleLarge.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  TextButton(
-                                    onPressed: onSkip,
-                                    child: Text(
-                                      'Skip',
-                                      style: AppTypography.labelLarge.copyWith(
-                                        color: Colors.white.withValues(alpha: 0.86),
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Flexible top spacer distributes empty space on
-                              // tall screens instead of clustering at the top.
-                              const Spacer(flex: 2),
                               const SizedBox(height: AppSpacing.s8),
                               const _SignalPill(
                                 icon: Icons.bolt_outlined,
@@ -146,7 +156,11 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              const Spacer(flex: 3),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                               const SizedBox(height: AppSpacing.s8),
                               FilledButton.icon(
                                 onPressed: onNext,
@@ -174,7 +188,7 @@ class WelcomeScreen extends StatelessWidget {
                               const SizedBox(height: AppSpacing.s2),
                             ],
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
