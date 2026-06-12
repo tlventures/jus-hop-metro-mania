@@ -1070,6 +1070,43 @@ async function qualifyReferralForUser(clientId, trigger) {
 
   const referralDoc = snap.docs[0];
   const referral = referralDoc.data();
+
+  // Anti-Sybil: a phone number can only ever qualify one referral, even
+  // across account deletion and re-signup (audit finding #6). The number
+  // comes from the Firebase Auth record, never the client. When enforcement
+  // is on, an unverified account stays pending until the phone is linked —
+  // the next earning trigger retries qualification.
+  let referredPhone = null;
+  try {
+    referredPhone = (await admin.auth().getUser(clientId)).phoneNumber || null;
+  } catch (error) {
+    logger.warn({ error: error.message, clientId }, 'Referral phone lookup failed');
+  }
+  if (!referredPhone && phoneVerificationEnforced()) return null;
+  if (referredPhone) {
+    const tombstoneRef = firestore
+      .collection('metrosafar_referral_phones')
+      .doc(hashPhoneNumber(referredPhone));
+    const claimed = await firestore.runTransaction(async (txn) => {
+      const tomb = await txn.get(tombstoneRef);
+      if (tomb.exists && tomb.data().referredUid !== clientId) return false;
+      txn.set(tombstoneRef, {
+        referredUid: clientId,
+        qualifiedAt: new Date().toISOString(),
+      }, { merge: true });
+      return true;
+    });
+    if (!claimed) {
+      await referralDoc.ref.set({
+        status: 'qualified',
+        qualifiedAt: new Date().toISOString(),
+        qualificationTrigger: trigger,
+        rewardBlockedReason: 'phone_already_used',
+      }, { merge: true });
+      return { status: 'qualified', rewardBlockedReason: 'phone_already_used' };
+    }
+  }
+
   const monthId = currentMonthId();
   const monthSnap = await firestore.collection('metrosafar_referrals')
     .where('referrerUid', '==', referral.referrerUid)
@@ -1255,6 +1292,47 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// ---------------------------------------------------------------------------
+// Phone verification (anti-Sybil) — audit finding #6
+//
+// The phone number arrives as a verified claim in the Firebase ID token after
+// the app links a phone credential (Firebase enforces one phone = one account
+// at the project level). Enforcement here trusts only the token, never the
+// client. Rollout is gated by REQUIRE_PHONE_VERIFIED=on so existing users get
+// a grace window before earning locks.
+// ---------------------------------------------------------------------------
+
+const PHONE_HASH_PEPPER = process.env.PHONE_HASH_PEPPER || '';
+if (!PHONE_HASH_PEPPER && process.env.NODE_ENV === 'production') {
+  console.warn('[WARNING] PHONE_HASH_PEPPER is not set — phone hashes will use an insecure default. Generate with: openssl rand -hex 32');
+}
+
+// DPDPA minimisation: we never persist the raw number outside Firebase Auth —
+// only an HMAC so equality checks (dedup, tombstones) still work.
+function hashPhoneNumber(phoneNumber) {
+  return crypto
+    .createHmac('sha256', PHONE_HASH_PEPPER || 'metrosafar-dev-pepper')
+    .update(String(phoneNumber))
+    .digest('hex');
+}
+
+function phoneVerificationEnforced() {
+  return process.env.REQUIRE_PHONE_VERIFIED === 'on';
+}
+
+function requirePhoneVerified(req, res, next) {
+  if (!phoneVerificationEnforced()) return next();
+  if (req.uid === 'api-key') return next(); // CI / bootstrap bypass
+  if (req.firebaseUser?.phone_number) return next();
+  res.status(403).json({
+    error: 'Verify your phone number to start earning points.',
+    code: 'phone_verification_required',
+  });
+}
+
+// The rides router is installed later from rides.js — gate its start route here.
+app.use('/api/rides/start', requirePhoneVerified);
+
 const phase56Context = {
   firestore,
   stations,
@@ -1357,6 +1435,40 @@ app.patch('/api/profile', validate(profilePatchSchema), async (req, res, next) =
           : current.digestNotificationsEnabled,
     });
     res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Called by the app right after linking a phone credential. The number comes
+// from the verified ID token claim — the client sends nothing. Stamps the
+// user doc so support/admin tooling can see verification status without an
+// Auth lookup, storing only a masked display value and an HMAC of the number.
+app.post('/api/profile/phone-verified', async (req, res, next) => {
+  try {
+    const phoneNumber = req.firebaseUser?.phone_number;
+    if (!phoneNumber) {
+      res.status(400).json({
+        error: 'No verified phone number on this account.',
+        code: 'phone_not_linked',
+      });
+      return;
+    }
+    const masked = phoneNumber.length > 4
+      ? `${phoneNumber.slice(0, 3)}••••${phoneNumber.slice(-2)}`
+      : phoneNumber;
+    const current = await getUserState(req.clientId, req.firebaseUser);
+    const updated = await saveUserState(req.clientId, {
+      ...current,
+      phone: masked,
+      phoneHash: hashPhoneNumber(phoneNumber),
+      phoneVerifiedAt: current.phoneVerifiedAt || new Date().toISOString(),
+    });
+    res.json({
+      phoneVerified: true,
+      phoneVerifiedAt: updated.phoneVerifiedAt,
+      phone: updated.phone,
+    });
   } catch (error) {
     next(error);
   }
@@ -1545,7 +1657,7 @@ app.post('/api/rewards/watch/:videoId', redeemLimiter, async (req, res, next) =>
   }
 });
 
-app.post('/api/rewards/redeem/:rewardId', redeemLimiter, async (req, res, next) => {
+app.post('/api/rewards/redeem/:rewardId', redeemLimiter, requirePhoneVerified, async (req, res, next) => {
   try {
     // Re-read directly from Firestore so we get the freshest stock/active state
     const rewardDoc = await firestore.collection('catalog_rewards').doc(req.params.rewardId).get();
@@ -1735,7 +1847,7 @@ const GAME_POINTS_OUTSIDE_TRANSIT = 5;
 const GAME_SCORE_MAX = { daily_spin: 1000, trivia: 5000, sudoku: 5000, word_puzzle: 5000, city_explorer: 5000 };
 const MIN_GAME_SECONDS = { trivia: 10, sudoku: 30, word_puzzle: 20, city_explorer: 15, daily_spin: 0 };
 
-app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema), async (req, res, next) => {
+app.post('/api/games/:gameId/complete', gameLimiter, requirePhoneVerified, validate(gameCompleteSchema), async (req, res, next) => {
   try {
     const validGames = ['daily_spin', 'trivia', 'sudoku', 'word_puzzle', 'city_explorer'];
     if (!validGames.includes(req.params.gameId)) {
@@ -1845,7 +1957,7 @@ app.post('/api/games/:gameId/complete', gameLimiter, validate(gameCompleteSchema
 // Streak (transactional)
 // ---------------------------------------------------------------------------
 
-app.post('/api/streak/claim', gameLimiter, async (req, res, next) => {
+app.post('/api/streak/claim', gameLimiter, requirePhoneVerified, async (req, res, next) => {
   try {
     const response = await claimTransaction(req.clientId, async (txn, state) => {
       const now = new Date();
@@ -2207,7 +2319,7 @@ app.get('/api/quests/today', async (req, res, next) => {
   }
 });
 
-app.post('/api/activity-events', contentLimiter, validate(activityEventSchema), async (req, res, next) => {
+app.post('/api/activity-events', contentLimiter, requirePhoneVerified, validate(activityEventSchema), async (req, res, next) => {
   try {
     const { type, entityId, metadata } = req.body;
     if (!ACTIVITY_POINT_RULES[type]) { res.status(400).json({ error: `Unknown activity type: ${type}` }); return; }
@@ -2451,7 +2563,7 @@ app.get('/api/rewards/admob-ssv', async (req, res) => {
 // Disabled by default now that AdMob SSV is the primary path. Enable only
 // during SSV debugging by setting LEGACY_WATCH_AD=on.
 
-app.post('/api/rewards/watch-ad', redeemLimiter, async (req, res, next) => {
+app.post('/api/rewards/watch-ad', redeemLimiter, requirePhoneVerified, async (req, res, next) => {
   if (process.env.LEGACY_WATCH_AD !== 'on') {
     return res.status(410).json({ error: 'Endpoint retired — rewards are now credited via AdMob SSV.' });
   }
@@ -2551,7 +2663,7 @@ app.get('/api/games/trivia/rank', async (req, res, next) => {
 });
 
 // ── POST /api/games/trivia/score — records score and triggers async leaderboard refresh
-app.post('/api/games/trivia/score', gameLimiter, validate(triviaScoreSchema), async (req, res, next) => {
+app.post('/api/games/trivia/score', gameLimiter, requirePhoneVerified, validate(triviaScoreSchema), async (req, res, next) => {
   try {
     const rank = await recordTriviaScore(req.clientId, req.body);
     const cityId = sanitizeCityId(req.body.cityId || '');

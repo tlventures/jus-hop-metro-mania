@@ -61,7 +61,10 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await _authService.signIn(email, password);
-      if (mounted) context.go('/home');
+      if (mounted) {
+        // Existing account without a verified phone — prompt (skippable).
+        context.go(_authService.isPhoneVerified ? '/home' : '/verify-phone');
+      }
     } on Exception catch (e) {
       if (mounted) setState(() => _errorMessage = _friendlyError(e.toString()));
     } finally {
@@ -91,7 +94,8 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() { _loading = true; _errorMessage = null; });
     try {
       await _authService.register(name, email, password);
-      if (mounted) context.go('/home');
+      // Phone verification unlocks earning (skippable inside the screen).
+      if (mounted) context.go('/verify-phone');
     } on Exception catch (e) {
       if (mounted) setState(() => _errorMessage = _friendlyError(e.toString()));
     } finally {

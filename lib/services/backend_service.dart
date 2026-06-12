@@ -31,6 +31,19 @@ class BackendAuthException implements Exception {
   String toString() => message;
 }
 
+/// Thrown on HTTP 403 with code `phone_verification_required` — earning is
+/// locked until the user links a verified phone number. UIs should offer a
+/// "Verify now" action that navigates to the phone verification screen.
+class PhoneVerificationRequiredException implements Exception {
+  final String message;
+  const PhoneVerificationRequiredException([
+    this.message = 'Verify your phone number to start earning points.',
+  ]);
+
+  @override
+  String toString() => message;
+}
+
 /// Thrown on HTTP 429 so the UI can show a friendly "slow down" message and
 /// optionally back off instead of surfacing a scary generic error.
 class BackendRateLimitException implements Exception {
@@ -138,6 +151,13 @@ class BackendService {
 
   Future<Map<String, dynamic>> getProfile() {
     return _getMap('/api/profile', cacheKey: 'cache_profile');
+  }
+
+  /// Call right after linking a phone credential so the backend stamps
+  /// phoneVerifiedAt + a privacy-preserving hash on the user doc. The number
+  /// itself travels only inside the verified ID token.
+  Future<Map<String, dynamic>> confirmPhoneVerified() {
+    return _sendJson('POST', '/api/profile/phone-verified');
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -883,6 +903,10 @@ class BackendService {
       }
       if (response.statusCode == 429) {
         throw BackendRateLimitException(retryAfterSeconds: _retryAfter(response));
+      }
+      if (response.statusCode == 403 &&
+          response.body.contains('phone_verification_required')) {
+        throw const PhoneVerificationRequiredException();
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         // Surface server-side errors directly — do NOT queue 4xx for offline retry.

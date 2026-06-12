@@ -352,6 +352,7 @@ class RideSessionNotifier extends StateNotifier<RideSessionState> {
   }
 
   String _friendlyError(Object e) {
+    if (e is PhoneVerificationRequiredException) return e.message;
     if (e is BackendHttpException) {
       try {
         final body = jsonDecode(e.body) as Map?;
