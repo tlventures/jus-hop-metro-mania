@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/commute/ride_verification.dart';
@@ -28,7 +31,10 @@ class _TicketVerificationSheet extends StatefulWidget {
 class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
   final _controller = TextEditingController();
   final _scannerController = MobileScannerController();
-  String _method = 'manual';
+  // Verification is always via a scanned/uploaded station QR token — there is no
+  // free-text manual entry, because a typed code can't be date-validated and
+  // would be a reward-fraud hole.
+  final String _method = 'qr';
   bool _showScanner = false;
   bool _handledScan = false;
 
@@ -44,7 +50,7 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
     if (code.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter or scan a valid ticket code to start.'),
+          content: Text('Scan or upload your metro ticket QR to start.'),
         ),
       );
       return;
@@ -85,10 +91,51 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
 
     _handledScan = true;
     setState(() {
-      _method = 'qr';
       _showScanner = false;
       _controller.text = token;
     });
+  }
+
+  /// Pick a ticket photo from the gallery and scan its QR/barcode. Lets riders
+  /// who screenshotted or saved their ticket verify without the live camera.
+  Future<void> _uploadAndScan() async {
+    final XFile? file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+    );
+    if (file == null || !mounted) return;
+
+    // analyzeImage emits any decoded barcode on the controller's stream; wait
+    // briefly for that result, then route it through the same handler the live
+    // scanner uses (so the QR-prefix validation still applies).
+    final completer = Completer<BarcodeCapture?>();
+    final sub = _scannerController.barcodes.listen((capture) {
+      if (!completer.isCompleted) completer.complete(capture);
+    });
+    _handledScan = false;
+    BarcodeCapture? capture;
+    try {
+      final found = await _scannerController.analyzeImage(file.path);
+      if (found == true) {
+        capture = await completer.future.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
+      }
+    } finally {
+      await sub.cancel();
+    }
+
+    if (!mounted) return;
+    if (capture != null) {
+      _handleScan(capture);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No readable QR/barcode found in that image.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -151,7 +198,7 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
               ),
               const SizedBox(height: AppSpacing.s3),
               Text(
-                'Scan the QR/barcode on your metro ticket, or enter the ticket reference code. Rewards start only after verification.',
+                'Scan the QR/barcode on your metro ticket, or upload a photo of it. Rewards start only after verification.',
                 style: AppTypography.bodyMedium.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -182,26 +229,33 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
                       },
                       icon: Icon(
                         _showScanner
-                            ? Icons.keyboard_outlined
+                            ? Icons.close
                             : Icons.qr_code_scanner_outlined,
                       ),
-                      label: Text(_showScanner ? 'Enter code' : 'Scan ticket'),
+                      label: Text(_showScanner ? 'Stop' : 'Scan'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s2),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _uploadAndScan,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Upload'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.s3),
+              // Read-only: shows the token captured from a scan/upload. Riders
+              // can't type a code by hand (manual codes can't be date-checked).
               TextField(
                 controller: _controller,
-                textInputAction: TextInputAction.done,
-                textCapitalization: TextCapitalization.characters,
+                readOnly: true,
                 decoration: const InputDecoration(
-                  labelText: 'Ticket or QR reference',
-                  hintText: 'Example: 8F4K2A91',
+                  labelText: 'Scanned ticket reference',
+                  hintText: 'Scan or upload your ticket QR',
                   prefixIcon: Icon(Icons.confirmation_number_outlined),
                 ),
-                onChanged: (_) => _method = 'manual',
-                onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: AppSpacing.s4),
               FilledButton.icon(

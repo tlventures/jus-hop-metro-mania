@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
@@ -198,7 +199,7 @@ class _SurveyCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(AppSpacing.s1),
                       decoration: const BoxDecoration(
-                        color: Colors.green,
+                        color: AppColors.success,
                         shape: BoxShape.circle,
                       ),
                       child: const Text(

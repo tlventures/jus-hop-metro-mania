@@ -186,7 +186,7 @@ class _PermissionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.s2),
                   decoration: const BoxDecoration(
-                    color: Colors.green,
+                    color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(

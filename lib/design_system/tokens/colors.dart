@@ -56,10 +56,14 @@ class AppColors {
   // Dark theme
   static const ColorScheme darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Color(0xFFD0BCFF),
-    onPrimary: Color(0xFF2D1B69),
-    primaryContainer: Color(0xFF443A82),
-    onPrimaryContainer: Color(0xFFEEF2FF),
+    // Brand teal, brightened for legibility on dark surfaces (the light theme
+    // primary `electricTeal` is too dark to read on a dark background). This
+    // replaces the off-brand Material baseline purple the dark scheme shipped
+    // with, so the accent stays teal in both light and dark modes.
+    primary: Color(0xFF5EEAD4),
+    onPrimary: Color(0xFF00382F),
+    primaryContainer: Color(0xFF005048),
+    onPrimaryContainer: Color(0xFFB4FFF3),
     secondary: Color(0xFFFFB3C6),
     onSecondary: Color(0xFF62102D),
     secondaryContainer: Color(0xFF8A1D43),
@@ -81,9 +85,9 @@ class AppColors {
     scrim: Colors.black,
     inverseSurface: Color(0xFFFBFAFF),
     onInverseSurface: Color(0xFF313142),
-    inversePrimary: metroIndigo,
+    inversePrimary: electricTeal,
     shadow: Colors.black,
-    surfaceTint: Color(0xFFD0BCFF),
+    surfaceTint: Color(0xFF5EEAD4),
   );
 
   // Semantic colors

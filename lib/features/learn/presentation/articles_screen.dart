@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
@@ -211,8 +212,8 @@ class _ArticleCard extends StatelessWidget {
                 if (article.isRead)
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.s1),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
+                    decoration: const BoxDecoration(
+                      color: AppColors.success,
                       shape: BoxShape.circle,
                     ),
                     child: const Text(

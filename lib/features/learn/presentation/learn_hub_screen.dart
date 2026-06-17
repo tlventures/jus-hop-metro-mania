@@ -52,8 +52,15 @@ class _LearnHubScreenState extends ConsumerState<LearnHubScreen> {
     final completedStories = ref.watch(completedStoriesProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () => Future.wait([
+          ref.read(articlesProvider.notifier).fetchArticles(),
+          ref.read(surveysProvider.notifier).fetchSurveys(),
+          ref.read(storiesProvider.notifier).fetchStories(),
+        ]),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 0,
             pinned: true,
@@ -100,7 +107,7 @@ class _LearnHubScreenState extends ConsumerState<LearnHubScreen> {
                             const SizedBox(height: AppSpacing.s2),
                             Text(
                               '${readArticles + completedSurveys + completedStories} items',
-                              style: AppTypography.displayMedium.copyWith(
+                              style: AppTypography.headlineMedium.copyWith(
                                 color: Colors.white,
                               ),
                             ),
@@ -171,6 +178,7 @@ class _LearnHubScreenState extends ConsumerState<LearnHubScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

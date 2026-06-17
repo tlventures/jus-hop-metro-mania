@@ -14,6 +14,7 @@ import '../../../core/city/content_pack_models.dart';
 import '../../../core/city/content_pack_provider.dart';
 import '../../../core/city/current_city_provider.dart';
 import '../../../design_system/components/game_shell.dart';
+import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
@@ -549,7 +550,7 @@ class _TimerAndMultiplier extends StatelessWidget {
                 strokeWidth: 6,
                 backgroundColor: colorScheme.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation(
-                  secondsLeft <= 5 ? Colors.orange : colorScheme.primary,
+                  secondsLeft <= 5 ? AppColors.warning : colorScheme.primary,
                 ),
               ),
               Center(

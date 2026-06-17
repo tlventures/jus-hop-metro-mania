@@ -36,8 +36,15 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final rewards = ref.watch(rewardsProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () => Future.wait([
+          ref.read(walletProvider.notifier).fetchWallet(),
+          ref.read(walletProvider.notifier).fetchTransactions(),
+          ref.read(rewardsProvider.notifier).fetchRewards(),
+        ]),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 0,
             pinned: true,
@@ -94,21 +101,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                                   icon: '🎬',
                                   title: 'Watch Videos',
                                   subtitle: 'Learn about metro & culture',
-                                  onTap: () => context.go('/learn'),
+                                  onTap: () => context.push('/learn'),
                                 ),
                                 const SizedBox(height: AppSpacing.s3),
                                 _EarnMethodTile(
                                   icon: '📖',
                                   title: 'Read Articles',
                                   subtitle: 'Daily stories & guides',
-                                  onTap: () => context.go('/learn'),
+                                  onTap: () => context.push('/learn'),
                                 ),
                                 const SizedBox(height: AppSpacing.s3),
                                 _EarnMethodTile(
                                   icon: '📝',
                                   title: 'Take Surveys',
                                   subtitle: 'Share your feedback',
-                                  onTap: () => context.go('/learn'),
+                                  onTap: () => context.push('/learn'),
                                 ),
                               ],
                             ),
@@ -133,6 +140,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -214,7 +222,7 @@ class _WalletBalanceHero extends StatelessWidget {
                     _formatPoints(wallet.points),
                     style: AppTypography.displayLarge.copyWith(
                       color: Colors.white,
-                      fontSize: 54,
+                      fontSize: 40,
                       fontWeight: FontWeight.w900,
                       height: 0.95,
                     ),

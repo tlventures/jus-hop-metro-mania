@@ -105,6 +105,12 @@ class CommuteNotifier extends StateNotifier<CommuteSessionState> {
       );
       final session = data['session'] as Map<String, dynamic>?;
       state = state.copyWith(sessionId: session?['id'] as String?);
+    } on BackendRequestException catch (error) {
+      // Terminal rejection (e.g. ticket already used / not today's). Undo the
+      // optimistic active state and let the caller surface the message.
+      debugPrint('Commute session rejected: $error');
+      state = const CommuteSessionState();
+      rethrow;
     } catch (error) {
       debugPrint('Commute session open failed: $error');
       state = state.copyWith(error: error.toString());

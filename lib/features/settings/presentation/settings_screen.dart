@@ -8,6 +8,7 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../app/router.dart' show clearOnboardingFlag;
+import '../../auth/auth_actions.dart';
 import '../../../services/backend_service.dart';
 import '../../../services/user_display_name.dart';
 import '../../profile/presentation/profile_screen.dart' show profileProvider;
@@ -69,11 +70,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
-    await clearOnboardingFlag();
-    if (mounted) context.go('/login');
-  }
+  Future<void> _signOut() => signOutAndReturnToLogin(context);
 
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(

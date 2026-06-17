@@ -13,6 +13,7 @@ import '../../learn/application/stories_provider.dart';
 import '../../home/application/streak_provider.dart';
 import '../../../services/backend_service.dart';
 import '../../../services/user_display_name.dart';
+import '../../auth/auth_actions.dart';
 
 final profileProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final svc = BackendService();
@@ -36,8 +37,14 @@ class ProfileScreen extends ConsumerWidget {
     final storiesCompleted = ref.watch(completedStoriesProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(profileProvider);
+          await ref.read(profileProvider.future);
+        },
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 0,
             pinned: true,
@@ -99,12 +106,27 @@ class ProfileScreen extends ConsumerWidget {
                     onTap: () => context.push('/settings'),
                     child: _SettingsHintRow(colorScheme: colorScheme),
                   ),
+                  const SizedBox(height: AppSpacing.s4),
+                  // Quick logout — discoverable here, not only buried in Settings.
+                  OutlinedButton.icon(
+                    onPressed: () => signOutAndReturnToLogin(context),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign Out'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      foregroundColor: colorScheme.error,
+                      side: BorderSide(
+                        color: colorScheme.error.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.s6 + 80),
                 ],
               ),
             ),
           ),
         ],
+        ),
       ),
     );
   }

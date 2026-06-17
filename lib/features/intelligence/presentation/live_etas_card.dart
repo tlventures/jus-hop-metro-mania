@@ -44,7 +44,7 @@ class LiveEtasCard extends ConsumerWidget {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => context.go('/journey-planner'),
+                    onPressed: () => context.push('/journey-planner'),
                     child: const Text('Plan'),
                   ),
                 ],

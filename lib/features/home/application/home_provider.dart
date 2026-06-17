@@ -65,7 +65,10 @@ class HomeNotifier extends StateNotifier<AsyncValue<HomeData>> {
 
   Future<void> fetch() async {
     if (_disposed) return;
-    state = const AsyncValue.loading();
+    // Keep the previous data visible while refreshing so the home doesn't blank
+    // to a full-screen skeleton on every resume/refresh — only the very first
+    // load (no previous value) shows the skeleton.
+    state = const AsyncValue<HomeData>.loading().copyWithPrevious(state);
     try {
       final raw = await _backendService.getHomeData();
       if (_disposed) return;
@@ -96,9 +99,12 @@ class HomeNotifier extends StateNotifier<AsyncValue<HomeData>> {
     }
   }
 
-  /// Called after any earn/redeem so the next home-open gets fresh data.
+  /// Called after any earn/redeem to pull fresh home data. Refreshes in the
+  /// background (keeps current data on screen) rather than blanking to a
+  /// skeleton — the home may stay mounted under a pushed game route, so a lazy
+  /// "reload on next open" would otherwise never fire.
   void invalidate() {
-    if (!_disposed) state = const AsyncValue.loading();
+    if (!_disposed) fetch();
   }
 }
 

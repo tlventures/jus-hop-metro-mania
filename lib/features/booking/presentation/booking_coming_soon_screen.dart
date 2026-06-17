@@ -57,7 +57,7 @@ class _BookingComingSoonScreenState extends State<BookingComingSoonScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Trip Planning', style: AppTypography.headlineMedium),
+        title: Text('Ticket Booking', style: AppTypography.headlineMedium),
       ),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.s6),
@@ -109,12 +109,12 @@ class _BookingComingSoonScreenState extends State<BookingComingSoonScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green),
+                    const Icon(Icons.check_circle, color: AppColors.success),
                     const SizedBox(width: AppSpacing.s3),
                     Text(
                       'You\'re on the waitlist!',
                       style: AppTypography.labelLarge.copyWith(
-                        color: Colors.green,
+                        color: AppColors.mintSuccess,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

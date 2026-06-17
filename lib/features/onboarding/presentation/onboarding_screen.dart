@@ -58,6 +58,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (mounted) context.go('/login');
   }
 
+  /// Declining optional analytics/marketing is a real, distinct choice — not a
+  /// silent equivalent of Accept. Confirm what it means before proceeding so
+  /// the Decline button doesn't behave identically to Accept.
+  void _declinePrivacy() async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Continue without analytics?'),
+        content: const Text(
+          'You can still use MetroSafar. We just won\'t collect optional '
+          'analytics or marketing data. You can change this anytime in Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (proceed == true) _completeOnboarding();
+  }
+
   /// Called when the CityConfirmScreen finishes — city is now set, proceed to login.
   void _onCityConfirmed() {
     _completeOnboarding();
@@ -92,13 +119,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const totalPages = 8;
+    final step = ref.watch(onboardingProvider).currentStep;
+
     return PopScope(
       canPop: false,
       child: Scaffold(
-        body: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Progress: tells the user how far through the 8-step flow they
+              // are, instead of an open-ended sequence with no end in sight.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: (step + 1) / totalPages,
+                    minHeight: 6,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
             // Page 0 – Welcome
             WelcomeScreen(
               onNext: _nextStep,
@@ -142,9 +191,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             // Page 7 – Privacy consent
             PrivacyConsentScreen(
               onAccept: _completeOnboarding,
-              onDecline: _completeOnboarding,
+              onDecline: _declinePrivacy,
             ),
-          ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -777,6 +777,44 @@ async function getActiveCommuteSession(clientId) {
   return { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
+/**
+ * Anti-fraud claim for a verified ticket. A given ticket (identified by the
+ * SHA-256 of its code) can be claimed by exactly one rider, is valid only for
+ * the current IST day, and each rider may claim it only once.
+ *
+ * Returns { ok: true, alreadyOwned } on success, or
+ * { ok: false, reason } where reason is 'claimed_by_other' | 'already_claimed'.
+ */
+async function claimVerifiedTicket({ codeHash, userId, method, stationId }) {
+  const today = istDayString();
+  const ref = firestore.collection('metrosafar_ticket_claims').doc(codeHash);
+  return firestore.runTransaction(async (txn) => {
+    const snap = await txn.get(ref);
+    if (snap.exists) {
+      const data = snap.data();
+      // Same rider re-posting the same ticket on the same day → idempotent
+      // (normal session re-submits), not a second claim.
+      if (data.userId === userId && data.claimDate === today) {
+        return { ok: true, alreadyOwned: true };
+      }
+      if (data.userId !== userId) {
+        return { ok: false, reason: 'claimed_by_other' };
+      }
+      // Same rider, but a different (earlier) day → the ticket is spent.
+      return { ok: false, reason: 'already_claimed' };
+    }
+    txn.set(ref, {
+      codeHash,
+      userId,
+      method,
+      stationId: stationId || null,
+      claimDate: today,
+      createdAt: new Date().toISOString(),
+    });
+    return { ok: true, alreadyOwned: false };
+  });
+}
+
 async function maybeGetCommuteMultiplier(clientId) {
   try {
     const session = await getActiveCommuteSession(clientId);
@@ -2196,7 +2234,23 @@ app.get('/api/me/redemptions', async (req, res, next) => {
 // GET /api/notifications/feed — in-app notification inbox (recent broadcasts)
 app.get('/api/notifications/feed', async (req, res, next) => {
   try {
+    // A new user must not see broadcasts that were sent before they joined.
+    // Use the Firebase Auth account-creation time as the cutoff — it is
+    // authoritative and present for every user, so no per-user backfill is
+    // needed. On lookup failure, fall back to showing everything (prior
+    // behaviour) rather than hiding the inbox.
+    let sinceIso = '1970-01-01T00:00:00.000Z';
+    try {
+      const authUser = await admin.auth().getUser(req.clientId);
+      if (authUser?.metadata?.creationTime) {
+        sinceIso = new Date(authUser.metadata.creationTime).toISOString();
+      }
+    } catch (e) {
+      logger.warn({ err: e, clientId: req.clientId }, 'Notification feed: signup-time lookup failed');
+    }
+
     const snap = await firestore.collection('app_notifications')
+      .where('createdAt', '>=', sinceIso)
       .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
@@ -2688,33 +2742,48 @@ app.post('/api/trip/commute-session', tripLimiter, validate(commuteSessionSchema
     let ticketVerification = existing?.ticketVerification || null;
     if (req.body.ticketVerification) {
       const tv = req.body.ticketVerification;
-      // If the method is 'qr', validate the HMAC station token before accepting.
-      if (tv.method === 'qr') {
-        const result = validateStationToken(tv.code || '');
-        if (!result.valid) {
-          res.status(400).json({
-            error: 'Invalid QR code',
-            reason: result.reason,
-            hint: 'Use an official MetroSafar station QR code.',
-          });
-          return;
-        }
-        ticketVerification = {
-          method: tv.method,
-          stationId: result.stationId,
-          codeHash: crypto.createHash('sha256').update(tv.code).digest('hex'),
-          status: 'hmac_verified',
-          verifiedAt: now,
-        };
-      } else {
-        // Manual/other method — keep existing hash-only flow.
-        ticketVerification = {
-          method: tv.method,
-          codeHash: crypto.createHash('sha256').update(tv.code || '').digest('hex'),
-          status: 'client_verified',
-          verifiedAt: now,
-        };
+      // Every verification must carry a valid, in-date station QR token. Station
+      // tokens rotate every ~24h, so an expired one is rejected here — this is
+      // what enforces "the ticket must be of today". Manual/free-text codes are
+      // rejected outright (no date proof = reward-fraud hole), regardless of the
+      // client-supplied `method`.
+      const result = validateStationToken(tv.code || '');
+      if (!result.valid) {
+        res.status(400).json({
+          error: 'Invalid or expired ticket QR',
+          reason: result.reason,
+          hint: 'Scan or upload an official MetroSafar station QR code.',
+        });
+        return;
       }
+      const stationId = result.stationId;
+      const status = 'hmac_verified';
+      const codeHash = crypto.createHash('sha256').update(tv.code || '').digest('hex');
+      // One ticket = one rider = one claim, today only. Reject re-use across
+      // riders or days (manual codes can't be date-checked, so the single-use
+      // claim is what stops a code being replayed on a later day).
+      const claim = await claimVerifiedTicket({
+        codeHash,
+        userId: req.clientId,
+        method: tv.method,
+        stationId,
+      });
+      if (!claim.ok) {
+        res.status(409).json({
+          error: claim.reason === 'claimed_by_other'
+            ? 'This ticket has already been verified by another rider.'
+            : 'This ticket has already been used. Each ticket is valid once, for today only.',
+          reason: claim.reason,
+        });
+        return;
+      }
+      ticketVerification = {
+        method: tv.method,
+        ...(stationId ? { stationId } : {}),
+        codeHash,
+        status,
+        verifiedAt: now,
+      };
     }
     const payload = {
       userId: req.clientId,
