@@ -158,7 +158,7 @@ class _RedemptionCard extends StatelessWidget {
             colorScheme.error);
       default: // pending
         return _infoLine(Icons.hourglass_top,
-            'Processing — your code will appear here shortly.', Colors.orange);
+            'Processing — your code will appear here shortly.', AppColors.warning);
     }
   }
 
@@ -249,7 +249,7 @@ class _StatusChip extends StatelessWidget {
     final (color, label) = switch (status) {
       'fulfilled' => (AppColors.electricTeal, 'Ready'),
       'cancelled' => (Colors.grey, 'Cancelled'),
-      _ => (Colors.orange, 'Processing'),
+      _ => (AppColors.warning, 'Processing'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(

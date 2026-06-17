@@ -365,9 +365,9 @@ class _QuestionView extends StatelessWidget {
           Color? tileColor;
           if (showResult) {
             if (isCorrect) {
-              tileColor = Colors.green.shade100;
+              tileColor = AppColors.success.withValues(alpha: 0.18);
             } else if (isSelected) {
-              tileColor = Colors.red.shade100;
+              tileColor = AppColors.danger.withValues(alpha: 0.18);
             }
           }
 
@@ -398,9 +398,9 @@ class _QuestionView extends StatelessWidget {
                         ),
                       ),
                       if (showResult && isCorrect)
-                        const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        const Icon(Icons.check_circle, color: AppColors.success, size: 18),
                       if (showResult && isSelected && !isCorrect)
-                        const Icon(Icons.cancel, color: Colors.red, size: 18),
+                        const Icon(Icons.cancel, color: AppColors.danger, size: 18),
                     ],
                   ),
                 ),
@@ -420,7 +420,7 @@ class _QuestionView extends StatelessWidget {
             Text(
               pts > 0 ? '+$pts pts earned!' : 'Incorrect — better luck next question!',
               style: AppTypography.bodyMedium.copyWith(
-                color: pts > 0 ? Colors.green : colorScheme.error,
+                color: pts > 0 ? AppColors.success : colorScheme.error,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -439,8 +439,8 @@ class _CountdownBadge extends StatelessWidget {
     final color = seconds > 10
         ? AppColors.goldPoints
         : seconds > 5
-            ? Colors.orange
-            : Colors.red;
+            ? AppColors.warning
+            : AppColors.danger;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.s3,

@@ -4,6 +4,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:metrosafar/design_system/components/state_views.dart';
 import 'package:metrosafar/design_system/tokens/colors.dart';
 import 'package:metrosafar/design_system/tokens/radius.dart';
 import 'package:metrosafar/design_system/tokens/spacing.dart';
@@ -27,26 +28,36 @@ class AudioStoriesScreen extends ConsumerWidget {
             // Now-playing bar (always visible if something is loaded)
             const _NowPlayingBar(),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.s6),
-                children: [
-                  _HeroBanner(),
-                  const SizedBox(height: AppSpacing.s6),
-                  ...items.map((ep) => _EpisodeCard(episode: ep)),
-                  if (items.isEmpty)
-                    Text(
-                      'Pilot episodes will appear after backend sync.',
-                      style: AppTypography.bodyMedium
-                          .copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-                ],
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(episodesProvider);
+                  await ref.read(episodesProvider.future);
+                },
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(AppSpacing.s6),
+                  children: [
+                    _HeroBanner(),
+                    const SizedBox(height: AppSpacing.s6),
+                    ...items.map((ep) => _EpisodeCard(episode: ep)),
+                    if (items.isEmpty)
+                      Text(
+                        'Pilot episodes will appear after backend sync.',
+                        style: AppTypography.bodyMedium
+                            .copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) =>
-            const Center(child: Text('Could not load episodes')),
+        error: (_, __) => AppErrorState(
+          title: 'Could not load episodes',
+          message: 'Check your connection and try again.',
+          onRetry: () => ref.invalidate(episodesProvider),
+        ),
       ),
     );
   }

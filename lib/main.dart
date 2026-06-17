@@ -221,6 +221,21 @@ class _MetroSafarAppState extends ConsumerState<MetroSafarApp> {
       themeMode: ThemeMode.system,
       routerConfig: router_module.appRouter,
       debugShowCheckedModeBanner: false,
+      // Clamp the system font scale so very large accessibility settings can't
+      // overflow fixed-height rows/carousels, while still honouring a moderate
+      // bump for low-vision users.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaler: mq.textScaler.clamp(
+              minScaleFactor: 1.0,
+              maxScaleFactor: 1.3,
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       locale: locale,
       localizationsDelegates: const [
         AppLocalizations.delegate,

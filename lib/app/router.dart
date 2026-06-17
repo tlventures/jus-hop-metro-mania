@@ -20,6 +20,7 @@ import '../features/learn/presentation/learn_hub_screen.dart';
 import '../features/booking/presentation/booking_coming_soon_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
+import '../features/auth/presentation/phone_auth_screen.dart';
 import '../features/audio/presentation/audio_stories_screen.dart';
 import '../features/events/presentation/events_screen.dart';
 import '../features/intelligence/presentation/journey_planner_screen.dart';
@@ -27,7 +28,9 @@ import '../features/phase56/presentation/feature_gate.dart';
 import '../features/referral/presentation/referral_screen.dart';
 import '../features/social/presentation/friends_screen.dart';
 import '../features/stamps/presentation/stamps_screen.dart';
-import '../features/trip/presentation/trip_mode_screen.dart';
+// Ride tab retired — the dedicated TripModeScreen is no longer routed because
+// the "Start Ride" flow on Home now covers the same commute action.
+// import '../features/trip/presentation/trip_mode_screen.dart';
 
 Future<void> initializeRouter() async {
   await SharedPreferences.getInstance();
@@ -51,10 +54,12 @@ Future<String?> _redirect(BuildContext context, GoRouterState state) async {
   // Not onboarded yet → force to onboarding (allow /onboarding itself)
   if (!doneOnboarding && path != '/onboarding') return '/onboarding';
 
-  // Onboarded but not signed in → force to login (allow /login itself)
+  // Onboarded but not signed in → force to login. Both the email login and the
+  // phone-OTP flow are valid signed-out destinations.
   final user = FirebaseAuth.instance.currentUser;
-  if (doneOnboarding && user == null && path != '/login') return '/login';
-  if (doneOnboarding && user != null && path == '/login') return '/home';
+  final isAuthRoute = path == '/login' || path == '/phone-login';
+  if (doneOnboarding && user == null && !isAuthRoute) return '/login';
+  if (doneOnboarding && user != null && isAuthRoute) return '/home';
 
   return null;
 }
@@ -62,6 +67,21 @@ Future<String?> _redirect(BuildContext context, GoRouterState state) async {
 /// Global navigator key — lets non-widget code (e.g. notification taps)
 /// drive navigation via [appRouter].
 final rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// The five destinations that live inside the bottom-nav [ShellRoute].
+const kShellTabPaths = {'/home', '/ride', '/play', '/wallet', '/profile'};
+
+/// Navigate the way the Android back button expects:
+/// - tab destinations switch with `go` (no stack growth),
+/// - every other (detail) screen is `push`ed on top, so the system back
+///   button pops back to where the user came from instead of closing the app.
+void navigateAppPath(BuildContext context, String path) {
+  if (kShellTabPaths.contains(path)) {
+    context.go(path);
+  } else {
+    context.push(path);
+  }
+}
 
 /// Maps a game id to its screen — shared by the Play hub and deep links.
 Widget gameScreenFor(String gameId) {
@@ -90,6 +110,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const OnboardingScreen(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/phone-login',
+      builder: (context, state) => const PhoneAuthScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) {
         final selectedIndex = _getSelectedIndex(state.fullPath ?? '/home');
@@ -97,9 +121,11 @@ final GoRouter appRouter = GoRouter(
       },
       routes: [
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+        // Retired: bounce any lingering /ride links (quests, notifications,
+        // legacy cards) to Home, where the Start Ride flow now lives.
         GoRoute(
           path: '/ride',
-          builder: (context, state) => const TripModeScreen(),
+          redirect: (context, state) => '/home',
         ),
         GoRoute(
           path: '/play',
@@ -189,10 +215,9 @@ final GoRouter appRouter = GoRouter(
 
 int _getSelectedIndex(String location) {
   if (location.startsWith('/home')) return 0;
-  if (location.startsWith('/ride')) return 1;
-  if (location.startsWith('/play')) return 2;
-  if (location.startsWith('/wallet')) return 3;
-  if (location.startsWith('/profile')) return 4;
+  if (location.startsWith('/play')) return 1;
+  if (location.startsWith('/wallet')) return 2;
+  if (location.startsWith('/profile')) return 3;
   return 0;
 }
 
@@ -204,6 +229,24 @@ class _NavShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Show the ad only on the content-heavy tabs (Home, Play). Wallet, Profile,
+    // and Ride stay ad-free so the ad isn't a permanent fixture on every screen.
+    final showAd = selectedIndex == 0 || selectedIndex == 1;
+    // System back: from any non-Home tab, return to Home rather than exiting
+    // the app. Only the Home tab allows the back gesture to close the app
+    // (standard Android root behaviour). Pushed detail screens are popped by
+    // the root navigator before this is ever consulted.
+    return PopScope(
+      canPop: selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        context.go('/home');
+      },
+      child: _buildScaffold(context, showAd),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, bool showAd) {
     return Scaffold(
       body: Column(children: [const OfflineBanner(), Expanded(child: child)]),
       bottomNavigationBar: Column(
@@ -212,28 +255,28 @@ class _NavShell extends StatelessWidget {
           // Ad lives in its own clearly-separated slot: top divider + solid
           // background + gap below, so it never blends into the nav bar
           // (prevents accidental taps and satisfies AdMob placement policy).
-          Builder(
-            builder: (context) {
-              final scheme = Theme.of(context).colorScheme;
-              return Container(
-                width: double.infinity,
-                color: scheme.surface,
-                // 24px top gap (was 8) + 24px bottom gap (was 16).
-                // Keeps the ad ≥24px away from any interactive nav target,
-                // satisfying AdMob placement policy and reducing accidental taps.
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
-                    const SizedBox(height: 24),
-                    const MetroSafarAdBanner(),
-                    const SizedBox(height: 8), // clearance below the ad unit itself
-                  ],
-                ),
-              );
-            },
-          ),
+          if (showAd)
+            Builder(
+              builder: (context) {
+                final scheme = Theme.of(context).colorScheme;
+                return Container(
+                  width: double.infinity,
+                  color: scheme.surface,
+                  // Compact ad slot: a thin divider plus small gaps keep the 50px
+                  // banner visually separated from the nav bar without making the
+                  // whole slot look oversized.
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+                      const SizedBox(height: 6),
+                      const MetroSafarAdBanner(),
+                    ],
+                  ),
+                );
+              },
+            ),
           NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => _navigateToTab(context, index),
@@ -242,12 +285,6 @@ class _NavShell extends StatelessWidget {
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home),
                 label: 'Home',
-                tooltip: '',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.train_outlined),
-                selectedIcon: Icon(Icons.train),
-                label: 'Ride',
                 tooltip: '',
               ),
               NavigationDestination(
@@ -280,12 +317,10 @@ class _NavShell extends StatelessWidget {
       case 0:
         context.go('/home');
       case 1:
-        context.go('/ride');
-      case 2:
         context.go('/play');
-      case 3:
+      case 2:
         context.go('/wallet');
-      case 4:
+      case 3:
         context.go('/profile');
     }
   }

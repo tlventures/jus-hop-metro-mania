@@ -36,8 +36,11 @@ class _PlayHubScreenState extends ConsumerState<PlayHubScreen> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(gamesProvider.notifier).fetchScores(),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 0,
             pinned: true,
@@ -126,6 +129,7 @@ class _PlayHubScreenState extends ConsumerState<PlayHubScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -244,7 +248,7 @@ class _ScoreHero extends StatelessWidget {
                   const SizedBox(height: AppSpacing.s2),
                   Text(
                     '$totalScore',
-                    style: AppTypography.displayLarge.copyWith(
+                    style: AppTypography.displaySmall.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
                       height: 1,

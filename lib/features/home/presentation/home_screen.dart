@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../app/router.dart';
 import '../../../core/city/current_city_provider.dart';
 import '../../../core/commute/commute_provider.dart';
+import '../../../design_system/components/state_views.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
+import '../../../services/backend_service.dart';
 import '../../../services/user_display_name.dart';
 import '../../notifications/application/notifications_provider.dart';
 import '../application/streak_provider.dart';
@@ -64,25 +67,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Wait for core data (streak, quests, wallet) to load before rendering.
-    // This prevents the flicker of stale defaults while data is fetching.
+    // Show the skeleton only on the FIRST load (no data yet). On later
+    // refreshes (resume, post-earn) we keep the existing data on screen so the
+    // home doesn't blink to a skeleton every time.
     final homeAsync = ref.watch(homeProvider);
-    if (homeAsync.isLoading) {
+    if (homeAsync.isLoading && !homeAsync.hasValue) {
       return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-          ),
-        ),
+        backgroundColor: colorScheme.surface,
+        body: SafeArea(child: AppLoadingSkeleton.home()),
       );
     }
-    if (homeAsync.hasError) {
+    if (homeAsync.hasError && !homeAsync.hasValue) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Error')),
-        body: Center(
-          child: TextButton(
-            onPressed: () => ref.read(homeProvider.notifier).fetch(),
-            child: const Text('Reload'),
+        backgroundColor: colorScheme.surface,
+        body: SafeArea(
+          child: AppErrorState(
+            icon: Icons.cloud_off,
+            title: "Couldn't load your home",
+            message: 'Check your connection and try again.',
+            onRetry: () => ref.read(homeProvider.notifier).fetch(),
           ),
         ),
       );
@@ -205,16 +208,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   _DailyQuestsSection(quests: quests),
                   const SizedBox(height: AppSpacing.s5),
 
-                  if (flags.tripMode) ...[
-                    _Phase56ActionCard(
-                      icon: Icons.route_outlined,
-                      title: 'Ride Mode',
-                      subtitle: 'Start a tunnel-ready commute session.',
-                      cta: 'Start',
-                      onTap: () => context.go('/ride'),
-                    ),
-                    const SizedBox(height: AppSpacing.s4),
-                  ],
                   if (flags.liveEtas) ...[
                     const LiveEtasCard(),
                     const SizedBox(height: AppSpacing.s5),
@@ -246,16 +239,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           icon: '📖',
                           label: 'Articles',
                           points: '+15',
-                          onTap: () => context.go('/learn'),
+                          onTap: () => context.push('/learn'),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.s5),
-
-                  // Always shown: the shelf now carries the "Book Tickets"
-                  // entry point in addition to any flag-gated companion cards.
-                  _Phase56Shelf(flags: flags),
                   const SizedBox(height: AppSpacing.s5),
 
                   if (co2Kg > 0) _EcoImpactCard(co2Kg: co2Kg),
@@ -265,33 +253,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ],
         ),
       ),
-      // Persistent, thumb-reachable primary action. Hidden while a commute
-      // is already running (the overlay takes over then).
-      bottomNavigationBar: commute.isVisible
+      // Primary action as a right-aligned floating action bar. Hidden while a
+      // commute is already running (the overlay takes over then).
+      floatingActionButton: commute.isVisible
           ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.s4, AppSpacing.s2, AppSpacing.s4, AppSpacing.s3,
-                ),
-                child: SizedBox(
-                  height: AppSpacing.buttonHeight,
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      _startVerifiedCommute();
-                    },
-                    icon: const Icon(Icons.train_rounded),
-                    label: const Text('Start Ride'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.neonLime,
-                      foregroundColor: AppColors.cityInk,
-                      textStyle: AppTypography.labelLarge.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+          : FloatingActionButton.extended(
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                _startVerifiedCommute();
+              },
+              backgroundColor: AppColors.neonLime,
+              foregroundColor: AppColors.cityInk,
+              icon: const Icon(Icons.train_rounded),
+              label: Text(
+                'Start Ride',
+                style: AppTypography.labelLarge.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
@@ -301,12 +278,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Future<void> _startVerifiedCommute() async {
     final verification = await showRideVerificationSheet(context);
     if (!mounted || verification == null) return;
-    await ref
-        .read(commuteProvider.notifier)
-        .startManual(
-          cityId: ref.read(activeCityProvider)?.id,
-          ticketVerification: verification,
+    try {
+      await ref
+          .read(commuteProvider.notifier)
+          .startManual(
+            cityId: ref.read(activeCityProvider)?.id,
+            ticketVerification: verification,
+          );
+    } on BackendRequestException catch (e) {
+      // e.g. ticket already verified by another rider / not today's ticket.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+      }
+    }
   }
 }
 
@@ -406,7 +395,7 @@ class _LaunchHero extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.s8),
+                  const SizedBox(height: AppSpacing.s5),
                   Text(
                     'Hey $firstName',
                     maxLines: 1,
@@ -416,16 +405,16 @@ class _LaunchHero extends ConsumerWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.s2),
+                  const SizedBox(height: AppSpacing.s1),
                   Text(
                     prompt,
-                    style: AppTypography.displayLarge.copyWith(
+                    style: AppTypography.titleLarge.copyWith(
                       color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      height: 1.05,
+                      fontWeight: FontWeight.w800,
+                      height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.s5),
+                  const SizedBox(height: AppSpacing.s4),
                   Row(
                     children: [
                       Expanded(
@@ -863,7 +852,9 @@ class _QuestRow extends StatelessWidget {
     final route = _routes[quest.id];
 
     return InkWell(
-      onTap: completed || route == null ? null : () => context.go(route),
+      onTap: completed || route == null
+          ? null
+          : () => navigateAppPath(context, route),
       borderRadius: AppRadius.borderRadiusL,
       child: Opacity(
         opacity: completed ? 0.7 : 1.0,
@@ -1055,174 +1046,6 @@ class _EarnCard extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Phase56Shelf extends StatelessWidget {
-  final FeatureFlags flags;
-  const _Phase56Shelf({required this.flags});
-
-  @override
-  Widget build(BuildContext context) {
-    final cards = <Widget>[
-      _MiniPhaseCard(
-        icon: Icons.train_outlined,
-        label: 'Book Tickets',
-        onTap: () => context.push('/booking'),
-      ),
-      if (flags.stamps)
-        _MiniPhaseCard(
-          icon: Icons.confirmation_number_outlined,
-          label: 'Station Stamps',
-          onTap: () => context.go('/stamps'),
-        ),
-      if (flags.audioStories)
-        _MiniPhaseCard(
-          icon: Icons.headphones_outlined,
-          label: 'Metro Tales',
-          onTap: () => context.go('/audio'),
-        ),
-      if (flags.liveEvents)
-        _MiniPhaseCard(
-          icon: Icons.bolt_outlined,
-          label: 'Live Events',
-          onTap: () => context.go('/events'),
-        ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(title: 'Metro Companion'),
-        const SizedBox(height: AppSpacing.s3),
-        Row(children: cards),
-      ],
-    );
-  }
-}
-
-class _Phase56ActionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String cta;
-  final VoidCallback onTap;
-
-  const _Phase56ActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.cta,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.borderRadiusXL,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.s4),
-        decoration: BoxDecoration(
-          color: colorScheme.primaryContainer,
-          borderRadius: AppRadius.borderRadiusXL,
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: colorScheme.primary,
-              child: Icon(icon, color: colorScheme.onPrimary, size: 20),
-            ),
-            const SizedBox(width: AppSpacing.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTypography.titleSmall.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: AppTypography.bodySmall.copyWith(
-                      color: colorScheme.onPrimaryContainer.withValues(
-                        alpha: 0.76,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s2),
-            Text(
-              cta,
-              style: AppTypography.labelLarge.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, size: 12, color: colorScheme.primary),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniPhaseCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _MiniPhaseCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.only(right: AppSpacing.s2),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: AppRadius.borderRadiusL,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              vertical: AppSpacing.s4,
-              horizontal: AppSpacing.s2,
-            ),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainer,
-              borderRadius: AppRadius.borderRadiusL,
-              border: Border.all(
-                color: colorScheme.outline.withValues(alpha: 0.22),
-              ),
-            ),
-            child: Column(
-              children: [
-                Icon(icon, color: AppColors.metroIndigo, size: 22),
-                const SizedBox(height: AppSpacing.s2),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: AppTypography.labelSmall.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

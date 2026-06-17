@@ -32,6 +32,18 @@ class BackendRateLimitException implements Exception {
   String toString() => message;
 }
 
+/// Thrown on a terminal 4xx client error (e.g. 409 ticket already used, 400
+/// validation). These must NOT be queued for offline retry — retrying can't
+/// change the outcome — and carry a user-facing [message] from the server.
+class BackendRequestException implements Exception {
+  final String message;
+  final int statusCode;
+  const BackendRequestException(this.message, this.statusCode);
+
+  @override
+  String toString() => message;
+}
+
 class BackendService {
   final http.Client _client;
 
@@ -797,6 +809,14 @@ class BackendService {
           retryAfterSeconds: _retryAfter(response),
         );
       }
+      // Terminal client errors (400/409/etc.) — surface the server message and
+      // never queue for retry.
+      if (response.statusCode >= 400 && response.statusCode < 500) {
+        throw BackendRequestException(
+          _parseErrorMessage(response.body),
+          response.statusCode,
+        );
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
           response.body.isNotEmpty ? response.body : 'Request failed',
@@ -813,10 +833,12 @@ class BackendService {
 
       return {};
     } catch (error) {
-      // Don't queue auth or rate-limit failures — only genuine connectivity ones.
+      // Don't queue auth, rate-limit, or terminal client errors — only genuine
+      // connectivity ones. Retrying a 4xx can't change the outcome.
       if (queueOffline &&
           error is! BackendAuthException &&
-          error is! BackendRateLimitException) {
+          error is! BackendRateLimitException &&
+          error is! BackendRequestException) {
         await Outbox().enqueue(
           PendingMutation(
             id: idempotencyKey,
@@ -836,6 +858,21 @@ class BackendService {
       }
       rethrow;
     }
+  }
+
+  /// Pull a human-readable message out of a JSON error body (`{"error": ...}`),
+  /// falling back to the raw body or a generic line.
+  String _parseErrorMessage(String body) {
+    if (body.isEmpty) return 'Request failed';
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['error'] is String) {
+        return decoded['error'] as String;
+      }
+    } catch (_) {
+      // Not JSON — fall through to the raw body.
+    }
+    return body;
   }
 
   /// Parse the Retry-After header (seconds) from a 429 response; default 5s.

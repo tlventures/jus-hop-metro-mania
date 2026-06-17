@@ -70,6 +70,8 @@ dependencies:
   # QR code generation and scanning
   qr_flutter: ^4.1.0
   mobile_scanner: ^3.5.4
+  # Pick a ticket photo from the gallery to scan its QR/barcode offline.
+  image_picker: ^1.0.7
 
   # HTTP client for API requests
   http: ^1.1.0

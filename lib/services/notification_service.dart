@@ -113,7 +113,6 @@ class NotificationService {
       'notifications_inbox': '/notifications-inbox',
       'settings': '/settings',
       'home': '/home',
-      'ride': '/ride',
       'play': '/play',
       'wallet': '/wallet',
       'profile': '/profile',
@@ -136,7 +135,14 @@ class NotificationService {
 
   void _navigate(String route) {
     try {
-      router_module.appRouter.go(route);
+      // Tab destinations switch with `go`; detail screens are `push`ed on top
+      // so the system back button returns to where the user was instead of
+      // closing the app (matches in-app navigation via navigateAppPath).
+      if (router_module.kShellTabPaths.contains(route)) {
+        router_module.appRouter.go(route);
+      } else {
+        router_module.appRouter.push(route);
+      }
     } catch (e) {
       debugPrint('[NotificationService] navigation failed: $e');
     }
