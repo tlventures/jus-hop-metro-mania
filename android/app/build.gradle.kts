@@ -56,6 +56,17 @@ android {
                 ?: System.getenv("ADMOB_APP_ID")
                 ?: "ca-app-pub-3940256099942544~3347511713"
 
+        // Google Maps SDK key. Kept out of source: supplied via the gitignored
+        // android/key.properties (mapsApiKey=...), a -PMAPS_API_KEY gradle
+        // property, or the MAPS_API_KEY env var. Empty by default so debug
+        // builds still assemble; a real key is required before any map screen
+        // ships. See RELEASE_SETUP.md.
+        manifestPlaceholders["mapsApiKey"] =
+            (keystoreProperties["mapsApiKey"] as String?)
+                ?: (project.findProperty("MAPS_API_KEY") as String?)
+                ?: System.getenv("MAPS_API_KEY")
+                ?: ""
+
         // Enable multidex support
         multiDexEnabled = true
     }

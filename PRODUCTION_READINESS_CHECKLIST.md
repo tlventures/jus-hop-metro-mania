@@ -11,16 +11,36 @@
 - [x] Add backend-driven privacy policy, terms, support, and disclosure screens
 - [x] Add widget and integration test coverage for booking, permissions, navigation, and persistence
 
+## Fixed since the deep audit (verified 2026-07-24)
+
+- [x] Real Firebase Auth — `lib/services/auth_service.dart` uses `FirebaseAuth`
+      (`signInWithEmailAndPassword`, `getIdToken()`); tokens are held in the
+      platform Keychain/Keystore by the SDK, not `SharedPreferences`. The old
+      `mock_token_*` flow is gone.
+- [x] Release signing wired — `android/app/build.gradle.kts` reads a gitignored
+      `android/key.properties`; `.gitignore` excludes `key.properties`, `*.jks`,
+      `*.keystore`. Only the real keystore + `key.properties` remain to be
+      created (see `RELEASE_SETUP.md`).
+- [x] Maps API key moved out of source — Android manifest declares
+      `com.google.android.geo.API_KEY` injected from a `manifestPlaceholder`
+      (sourced from `key.properties` / `MAPS_API_KEY`), empty by default.
+- [x] Backend claim idempotency — Firestore transactions + idempotency records
+      in place (`backend/server.js:563`, `2232`, `2258`).
+
 ## Still required before Play Store release
 
-- [ ] Replace debug release signing with a real upload keystore
-- [ ] Move Google Maps API keys out of source and lock them down by app/package restrictions
-- [ ] Replace the remaining mocked auth flow with a real authenticated backend workflow
+- [ ] Create the real upload keystore and `android/key.properties` (steps in
+      `RELEASE_SETUP.md`) — release builds are debug-signed until then.
+- [ ] Provide a real, package-restricted Google Maps key before shipping any map
+      screen (`google_maps_flutter` is a dependency but no `GoogleMap` widget is
+      rendered yet, so it is not a runtime crash today). iOS `AppDelegate` wiring
+      still pending — see `RELEASE_SETUP.md`.
 - [ ] Add and declare real app assets, or remove unused asset references/constants
-- [ ] Verify release build and Play Console requirements on a machine with enough free disk space
-- [ ] Review the included compliance audit and complete the final Play policy submission materials
+- [ ] Review the included compliance audit and complete the final Play policy
+      submission materials
 
 ## Validation status
 
-- `flutter analyze` previously reported lint and safety issues
-- `flutter test` could not complete because the machine was out of disk space
+- `flutter build apk --release` succeeds (verified 2026-07-24; 80 MB APK,
+  debug-signed) and installs on a physical device (Samsung SM-F415F, Android 12).
+- `flutter analyze` previously reported lint and safety issues — re-run before submission.

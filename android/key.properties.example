@@ -1,0 +1,12 @@
+# Copy this file to android/key.properties and fill in real values.
+# android/key.properties is gitignored — NEVER commit the real file or the keystore.
+#
+# Release signing (required for Play Store upload):
+storeFile=/absolute/path/to/upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME
+
+# Google Maps SDK key (required before any map screen ships).
+# Optional here — may instead be passed via -PMAPS_API_KEY or the MAPS_API_KEY env var.
+mapsApiKey=CHANGE_ME
