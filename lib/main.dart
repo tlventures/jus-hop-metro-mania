@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +31,18 @@ import 'services/notification_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  ErrorWidget.builder = (_) => const _ProductionErrorFallback();
+  // A widget that throws during build must not paint over a working screen.
+  // ErrorWidget.builder is GLOBAL, so it renders wherever the throw happened —
+  // including a small app-bar slot, which is how a single failing chip once
+  // showed a full "Something went wrong" card across the home screen.
+  //
+  // Release: log to Crashlytics, then render nothing — the rest of the screen
+  // stays usable. Debug/profile: show the diagnostic so bugs are loud.
+  ErrorWidget.builder = (details) {
+    FirebaseCrashlytics.instance.recordFlutterError(details);
+    if (kReleaseMode) return const SizedBox.shrink();
+    return const _ProductionErrorFallback();
+  };
   // Draw under the system bars so branded backgrounds are full-bleed
   // (eliminates the white band above the navigation bar).
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);

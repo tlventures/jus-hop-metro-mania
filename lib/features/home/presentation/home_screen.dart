@@ -104,12 +104,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final wallet = ref.watch(walletProvider);
     final games = ref.watch(gamesProvider);
     final profileAsync = ref.watch(profileProvider);
-    final flags = ref.watch(featureFlagsProvider).value ?? FeatureFlags.empty;
+    final flags = ref.watch(featureFlagsProvider).valueOrNull ?? FeatureFlags.empty;
     ref.watch(commuteAutoStartProvider);
     final commute = ref.watch(commuteProvider);
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
-    final profile = profileAsync.value;
+    final profile = profileAsync.valueOrNull;
     final userName =
         UserDisplayName.name(firebaseUser: firebaseUser, profile: profile);
     final co2Kg = _asDouble(profile?['co2SavedKg']);
@@ -200,7 +200,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 const Spacer(),
                 Builder(
                   builder: (context) {
-                    final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
+                    final unread = ref.watch(unreadNotificationsProvider).valueOrNull ?? 0;
                     return IconButton(
                       tooltip: 'Notifications',
                       onPressed: () => context.push('/notifications-inbox'),
@@ -1169,12 +1169,12 @@ class _EarnChipsRow extends ConsumerWidget {
     final streakAsync = ref.watch(earn.streakStatusProvider);
     final balanceAsync = ref.watch(walletBalanceProvider);
 
-    final StreakStatus? live = streakAsync.value;
+    final StreakStatus? live = streakAsync.valueOrNull;
     final int day = live?.currentDay ?? fallbackStreak.currentDay;
     final bool canClaim = live?.canClaim ?? fallbackStreak.canClaim;
     final int nextPts = live?.nextRewardPoints ?? fallbackStreak.pointsForClaim;
 
-    final int liveBalance = balanceAsync.value?.points ?? 0;
+    final int liveBalance = balanceAsync.valueOrNull?.points ?? 0;
 
     return Row(
       children: [

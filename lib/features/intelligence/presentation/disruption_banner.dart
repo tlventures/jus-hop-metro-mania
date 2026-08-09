@@ -12,7 +12,7 @@ class DisruptionBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final disruptions =
-        ref.watch(disruptionsProvider).value?['disruptions']
+        ref.watch(disruptionsProvider).valueOrNull?['disruptions']
             as List<dynamic>? ??
         [];
     if (disruptions.isEmpty) return const SizedBox.shrink();
