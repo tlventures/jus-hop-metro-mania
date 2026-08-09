@@ -30,7 +30,8 @@ class TicketingService {
   TicketingService({http.Client? client}) : _client = client ?? http.Client();
 
   Uri _uri(String path) {
-    final url = '${ApiConfig.baseUrl}$path';
+    // Booking is fulfilled by the ONDC/Beckn backend, NOT the app backend.
+    final url = '${ApiConfig.ondcBaseUrl}$path';
     assert(url.startsWith('https://'), 'Ticketing API must be HTTPS: $url');
     if (!url.startsWith('https://')) {
       throw StateError('Refusing to send booking traffic over non-HTTPS URL.');
