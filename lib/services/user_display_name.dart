@@ -74,7 +74,7 @@ class UserDisplayName {
   static bool _isGeneratedEmail(String email) {
     final normalized = email.trim().toLowerCase();
     return normalized.startsWith('member-') &&
-        normalized.endsWith('@metrosafar.app');
+        normalized.endsWith('@metrosafar.in');
   }
 
   static bool _isGeneratedEmailLocal(String localPart) {

@@ -7,44 +7,44 @@ import 'package:flutter/foundation.dart';
 /// Resolution order:
 ///   1. `--dart-define=METROSAFAR_API_BASE_URL=...` (set by build_release.sh / CI)
 ///   2. Local dev backend when running under `flutter test`
-///   3. The known production Cloud Run URL (debug/dev convenience only)
-///
-/// In a **release** build we require the dart-define to be present: shipping a
-/// hardcoded URL means a backend move forces an app update, and silently baking
-/// the wrong environment into a store build is a classic launch incident. If it
-/// is missing in release, we fail fast (assert in profile/debug; the const
-/// fallback still applies in production so the app is never bricked, but the
-/// assert catches it in CI/QA before it ships).
+///   3. **Release: hard-fail** — refuse to fall back to a hardcoded URL so a
+///      staging build that forgot the dart-define can't leak into prod.
+///   4. Debug/profile only: known Cloud Run URL for convenience.
 class ApiConfig {
   static const String _envBaseUrl = String.fromEnvironment(
     'METROSAFAR_API_BASE_URL',
   );
 
-  // Production Cloud Run URL. Kept only as a last-resort fallback so debug runs
-  // "just work"; release builds should always pass the dart-define.
-  static const String _productionBaseUrl =
-      'https://metrosafar-backend-pxx5jjbiyq-el.a.run.app';
+  static const String _debugFallbackUrl = 'https://ondc.metrosafar.in';
 
   static String get baseUrl {
     if (_envBaseUrl.isNotEmpty) {
+      _assertSecure(_envBaseUrl);
       return _envBaseUrl;
     }
 
     if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      // Only tests may talk to localhost. Anything else is a real device or
+      // CI where the backend must be reached over HTTPS.
       return Platform.isAndroid
           ? 'http://10.0.2.2:8080'
           : 'http://127.0.0.1:8080';
     }
 
-    // Release builds must supply the URL explicitly. This assert is stripped in
-    // production but fails loudly in debug/profile and CI so a misconfigured
-    // build is caught before the Play Store.
-    assert(
-      !kReleaseMode || _envBaseUrl.isNotEmpty,
-      'METROSAFAR_API_BASE_URL must be provided via --dart-define for release '
-      'builds. Use scripts/build_release.sh.',
-    );
+    if (kReleaseMode) {
+      throw StateError(
+        'METROSAFAR_API_BASE_URL was not supplied to a release build. '
+        'Ship via scripts/build_release.sh which passes --dart-define.',
+      );
+    }
 
-    return _productionBaseUrl;
+    _assertSecure(_debugFallbackUrl);
+    return _debugFallbackUrl;
+  }
+
+  static void _assertSecure(String url) {
+    if (!url.startsWith('https://')) {
+      throw StateError('METROSAFAR_API_BASE_URL must be HTTPS: $url');
+    }
   }
 }

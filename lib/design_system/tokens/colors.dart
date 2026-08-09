@@ -5,6 +5,7 @@ class AppColors {
   AppColors._();
 
   // Brand colors
+  static const Color primary = electricTeal;
   static const Color metroIndigo = Color(0xFF4F46E5);
   static const Color warmCoral = Color(0xFFFB7185);
   static const Color mintSuccess = Color(0xFF10B981);

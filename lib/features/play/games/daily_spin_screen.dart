@@ -214,7 +214,7 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
       ShareParams(
         text:
             'I just won $label on MetroSafar Daily Spin! 🚇 Try your luck today.\n\n'
-            'Get the app: https://metrosafar.app',
+            'Get the app: https://metrosafar.in',
         subject: 'MetroSafar Daily Spin',
       ),
     );

@@ -17,6 +17,93 @@ class CityRepository {
   static const _citiesListKey = 'cities_list_v1';
   static const _staleDuration = Duration(hours: 6);
 
+  /// In-app fallback so onboarding still works when the backend has no
+  /// `/api/v2/cities` route deployed. Replace/extend once that service is
+  /// live. Kept minimal on purpose — one row, real operator name, real ONDC
+  /// city code (std:040 = Hyderabad).
+  static final List<CitySummary> _builtInCities = [
+    const CitySummary(
+      id: 'hyderabad',
+      name: {'en': 'Hyderabad'},
+      status: CityStatus.live,
+      operatorShortName: 'HMRL',
+    ),
+  ];
+
+  /// Minimal Hyderabad bundle so `fetchCity('hyderabad')` returns something
+  /// usable when `/api/v2/cities/{id}/bundle` is not deployed. Stations are
+  /// real HMRL Red Line endpoints; add more here as needed for QA.
+  static Map<String, dynamic> _builtInBundle(String cityId) {
+    if (cityId != 'hyderabad') return {};
+    return {
+      'id': 'hyderabad',
+      'name': {'en': 'Hyderabad'},
+      'operator': {'id': 'hmrl', 'name': 'Hyderabad Metro Rail Limited', 'shortName': 'HMRL'},
+      'country': 'IN',
+      'timezone': 'Asia/Kolkata',
+      'primaryLocales': ['en', 'te', 'hi'],
+      'defaultLocale': 'en',
+      'status': 'live',
+      'lines': [],
+      'stations': [
+        {
+          'id': 'hyd_red_miyapur',
+          'cityId': 'hyd',
+          'names': {'en': 'Miyapur'},
+          'code': 'MYP',
+          'lineIds': ['red'],
+          'latitude': 17.4959,
+          'longitude': 78.3612,
+        },
+        {
+          'id': 'hyd_red_kphb',
+          'cityId': 'hyd',
+          'names': {'en': 'KPHB Colony'},
+          'code': 'KPH',
+          'lineIds': ['red'],
+          'latitude': 17.4849,
+          'longitude': 78.3915,
+        },
+        {
+          'id': 'hyd_red_ameerpet',
+          'cityId': 'hyd',
+          'names': {'en': 'Ameerpet'},
+          'code': 'AMP',
+          'lineIds': ['red', 'blue'],
+          'latitude': 17.4374,
+          'longitude': 78.4482,
+        },
+        {
+          'id': 'hyd_red_mgbs',
+          'cityId': 'hyd',
+          'names': {'en': 'MG Bus Station'},
+          'code': 'MGB',
+          'lineIds': ['red', 'green'],
+          'latitude': 17.3782,
+          'longitude': 78.4867,
+        },
+        {
+          'id': 'hyd_red_dilsukhnagar',
+          'cityId': 'hyd',
+          'names': {'en': 'Dilsukhnagar'},
+          'code': 'DSN',
+          'lineIds': ['red'],
+          'latitude': 17.3687,
+          'longitude': 78.5247,
+        },
+        {
+          'id': 'hyd_red_lbnagar',
+          'cityId': 'hyd',
+          'names': {'en': 'LB Nagar'},
+          'code': 'LBN',
+          'lineIds': ['red'],
+          'latitude': 17.3479,
+          'longitude': 78.5525,
+        },
+      ],
+    };
+  }
+
   final http.Client _client;
   CityRepository({http.Client? client}) : _client = client ?? http.Client();
 
@@ -63,7 +150,9 @@ class CityRepository {
         Telemetry.recordNonFatal(e, st, reason: 'city_summaries_stale_cache_parse');
       }
     }
-    return [];
+    // Backend has no /api/v2/cities yet — ship a static Hyderabad row so
+    // onboarding never dead-ends. Remove once the v2 service is deployed.
+    return List<CitySummary>.from(_builtInCities);
   }
 
   // ── City resolve ──────────────────────────────────────────────────────────
@@ -126,6 +215,9 @@ class CityRepository {
         Telemetry.recordNonFatal(e, st, reason: 'city_bundle_stale_cache_parse');
       }
     }
+    // Built-in Hyderabad bundle when v2 backend isn't deployed.
+    final builtin = _builtInBundle(cityId);
+    if (builtin.isNotEmpty) return City.fromJson(builtin);
     return null;
   }
 
@@ -145,7 +237,10 @@ class CityRepository {
     } catch (e) {
       debugPrint('CityRepository.fetchStations error: $e');
     }
-    return [];
+    // Fall back to the built-in bundle's stations so booking still works.
+    final builtin = _builtInBundle(cityId);
+    final list = builtin['stations'] as List? ?? [];
+    return list.map((s) => MetroStation.fromJson(Map<String, dynamic>.from(s as Map))).toList();
   }
 
   // ── Active city preference ────────────────────────────────────────────────

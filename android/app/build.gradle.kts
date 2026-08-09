@@ -18,9 +18,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.tlventures.metrosafar"
-    // compileSdk 36: required by google_mobile_ads 9.x and several other
-    // plugins. targetSdk stays at 35 (Play's current requirement); compiling
-    // against a higher SDK is backward compatible.
+    // compileSdk 36 / targetSdk 36: aligns with Android 16 and Google Play's
+    // 2026 target API requirement for new apps and updates.
     compileSdk = 36
 
     // Update NDK version to match what plugins require
@@ -53,16 +52,24 @@ android {
         // Explicit SDK levels rather than the Flutter defaults so a toolchain
         // bump can never silently regress us below Play Store requirements.
         //   minSdk 23   — required by firebase_auth / google_mobile_ads 7.x.
-        //   targetSdk 35 — Play Store mandates target API 35 for new app
-        //     submissions and updates (effective Aug 2025).
+        //   targetSdk 36 — Play Store mandates target API 36 for new app
+        //     submissions and updates starting Aug 31, 2026.
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["adMobApplicationId"] =
             (project.findProperty("ADMOB_APP_ID") as String?)
                 ?: System.getenv("ADMOB_APP_ID")
                 ?: "ca-app-pub-3940256099942544~3347511713"
+
+        // Google Maps — same resolution order as AdMob: gradle property → env → test key.
+        // The test key below is a publicly-documented Google demo key for local dev;
+        // CI / release builds MUST supply the real key via GOOGLE_MAPS_API_KEY.
+        manifestPlaceholders["googleMapsApiKey"] =
+            (project.findProperty("GOOGLE_MAPS_API_KEY") as String?)
+                ?: System.getenv("GOOGLE_MAPS_API_KEY")
+                ?: "AIzaSyBxExample_REPLACE_WITH_REAL_KEY"
 
         // Enable multidex support
         multiDexEnabled = true

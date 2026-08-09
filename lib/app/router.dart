@@ -18,7 +18,10 @@ import '../features/play/games/sudoku_screen.dart';
 import '../features/play/games/word_puzzle_screen.dart';
 import '../features/play/games/city_explorer_screen.dart';
 import '../features/learn/presentation/learn_hub_screen.dart';
-import '../features/booking/presentation/booking_coming_soon_screen.dart';
+import '../features/booking/presentation/station_search_screen.dart';
+import '../features/booking/presentation/route_selection_screen.dart';
+import '../features/booking/presentation/booking_checkout_screen.dart';
+import '../features/booking/presentation/ticket_details_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/audio/presentation/audio_stories_screen.dart';
@@ -29,6 +32,7 @@ import '../features/referral/presentation/referral_screen.dart';
 import '../features/social/presentation/friends_screen.dart';
 import '../features/stamps/presentation/stamps_screen.dart';
 import '../features/trip/presentation/trip_mode_screen.dart';
+import '../features/wallet/presentation/promo_redeem_screen.dart';
 
 const _kOnboardingKey = 'hasCompletedOnboarding';
 
@@ -109,7 +113,14 @@ final GoRouter appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
+          // Bottom-nav "Book" tab. Points at the booking flow now; the older
+          // TripModeScreen (live commute tracking) is still available at
+          // /commute for when the pivot to booking-first is complete.
           path: '/ride',
+          builder: (context, state) => const StationSearchScreen(),
+        ),
+        GoRoute(
+          path: '/commute',
           builder: (context, state) => const TripModeScreen(),
         ),
         GoRoute(
@@ -136,6 +147,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const MyRedemptionsScreen(),
     ),
     GoRoute(
+      path: '/wallet/redeem',
+      builder: (context, state) => const PromoRedeemScreen(),
+    ),
+    GoRoute(
       path: '/notifications-inbox',
       builder: (context, state) => const NotificationsInboxScreen(),
     ),
@@ -150,7 +165,21 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/booking',
-      builder: (context, state) => const BookingComingSoonScreen(),
+      builder: (context, state) => const StationSearchScreen(),
+      routes: [
+        GoRoute(
+          path: 'routes',
+          builder: (context, state) => const RouteSelectionScreen(),
+        ),
+        GoRoute(
+          path: 'checkout',
+          builder: (context, state) => const BookingCheckoutScreen(),
+        ),
+        GoRoute(
+          path: 'ticket',
+          builder: (context, state) => const TicketDetailsScreen(),
+        ),
+      ],
     ),
     GoRoute(
       path: '/friends',
@@ -290,38 +319,40 @@ class _NavShellState extends State<_NavShell> {
           NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => _navigateToTab(context, index),
-            // Tooltips double as the accessibility (TalkBack) announcement for
-            // each destination; an empty string suppressed it.
+            // Empty tooltip suppresses the floating pill overlay that
+            // Material 3 renders on some devices (was reported as a
+            // showstopper visual bug). TalkBack still announces the
+            // label text, so accessibility is preserved.
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home),
                 label: 'Home',
-                tooltip: 'Home',
+                tooltip: '',
               ),
               NavigationDestination(
-                icon: Icon(Icons.train_outlined),
-                selectedIcon: Icon(Icons.train),
-                label: 'Ride',
-                tooltip: 'Ride mode',
+                icon: Icon(Icons.confirmation_number_outlined),
+                selectedIcon: Icon(Icons.confirmation_number),
+                label: 'Book',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.sports_esports_outlined),
                 selectedIcon: Icon(Icons.sports_esports),
                 label: 'Play',
-                tooltip: 'Play games',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.wallet_outlined),
                 selectedIcon: Icon(Icons.wallet),
                 label: 'Wallet',
-                tooltip: 'Wallet and rewards',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
                 label: 'Profile',
-                tooltip: 'Profile',
+                tooltip: '',
               ),
             ],
           ),

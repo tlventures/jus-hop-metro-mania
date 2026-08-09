@@ -6,9 +6,9 @@ import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
-import '../../../core/commute/commute_provider.dart';
 import '../../../services/admob_config.dart';
-import '../../home/application/home_provider.dart';
+import '../../wallet/application/promo_provider.dart';
+import '../../wallet/data/rewards_service.dart';
 
 /// "Watch a video, earn points" — shows a rewarded ad and credits points
 /// (server-enforced daily cap) when the user finishes watching.
@@ -101,22 +101,37 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
     );
     await ad.show(
       onUserEarnedReward: (_, reward) async {
-        // SSV is the primary award path (Google calls our backend directly).
-        // The legacy POST /api/rewards/watch-ad acts as a fallback while SSV
-        // is being verified in production.
         if (!mounted) return;
-        // Refresh wallet after a brief delay to pick up the SSV-credited points.
-        Future.delayed(const Duration(seconds: 3), () {
+        // Credit via our unified earn endpoint. AdMob SSV is stronger for
+        // production; this is the client-declared path until SSV is verified
+        // in prod. Idempotency-Key uses the user+ad+timestamp so replay is
+        // rejected by the backend.
+        final eventId = 'ad:$uid:${DateTime.now().millisecondsSinceEpoch}';
+        try {
+          final res = await RewardsService().earn(
+            source: 'AD_WATCH',
+            eventId: eventId,
+          );
+          ref.invalidate(walletBalanceProvider);
           if (mounted) {
-            ref.read(homeProvider.notifier).fetch();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  res.pointsAwarded > 0
+                      ? 'Earned ${res.pointsAwarded} pts · ${res.dayCapRemainingSource} more today'
+                      : 'Daily ad cap reached — come back tomorrow',
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Video complete. Verifying your reward...'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not credit reward: $e')),
+            );
+          }
+        }
       },
     );
   }
@@ -125,11 +140,10 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
   Widget build(BuildContext context) {
     if (!AdMobConfig.adsEnabled) return const SizedBox.shrink();
     final colorScheme = Theme.of(context).colorScheme;
-    final commuteActive = ref.watch(commuteProvider).isActive;
     final ready = _ad != null && !_showing;
 
     return GestureDetector(
-      onTap: ready && commuteActive ? _watch : null,
+      onTap: ready ? _watch : null,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.s4),
         decoration: BoxDecoration(
@@ -172,9 +186,7 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
                   const SizedBox(height: 2),
                   Text(
                     ready
-                        ? (commuteActive
-                            ? 'Watch a short video, earn +15 pts'
-                            : 'Start Ride Mode to unlock rewards')
+                        ? 'Watch a short video, earn +10 pts'
                         : 'Loading a video…',
                     style: AppTypography.bodySmall.copyWith(
                       color: colorScheme.onSurfaceVariant,

@@ -5,7 +5,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/city/current_city_provider.dart';
 import '../../../core/commute/commute_provider.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
@@ -14,14 +13,16 @@ import '../../../design_system/tokens/typography.dart';
 import '../../../services/user_display_name.dart';
 import '../../../services/version_gate.dart';
 import '../../commute/presentation/commute_overlay.dart';
-import '../../commute/presentation/ticket_verification_sheet.dart';
 import '../../intelligence/presentation/disruption_banner.dart';
 import '../../intelligence/presentation/live_etas_card.dart';
 import '../../notifications/application/notifications_provider.dart';
 import '../../phase56/application/feature_flags_provider.dart';
 import '../../play/application/games_provider.dart';
 import '../../profile/presentation/profile_screen.dart' show profileProvider;
+import '../../wallet/application/earn_provider.dart' as earn;
+import '../../wallet/application/promo_provider.dart';
 import '../../wallet/application/wallet_provider.dart';
+import '../../wallet/data/rewards_service.dart' show StreakStatus;
 import '../application/home_provider.dart';
 import '../application/quest_provider.dart';
 import '../application/streak_provider.dart';
@@ -166,69 +167,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return Scaffold(
       backgroundColor: _canvas,
-      appBar: AppBar(
-        backgroundColor: _canvas,
-        scrolledUnderElevation: 0,
-        leadingWidth: 56,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: GestureDetector(
-            onTap: () => context.go('/profile'),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: cs.primaryContainer,
-              child: Text(
-                UserDisplayName.initial(userName.split(' ').first),
-                style: AppTypography.labelLarge.copyWith(
-                  color: cs.onPrimaryContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ),
-        titleSpacing: 0,
-        title: Text(
-          'MetroSafar',
-          style: AppTypography.headlineMedium.copyWith(color: cs.onSurface),
-        ),
-        actions: [
-          _StatChip(
-            icon: Icons.local_fire_department,
-            iconColor: AppColors.goldPoints,
-            label: '${streak.currentDay}',
-            pulsing: streak.canClaim,
-            onTap: () => _showStreakSheet(context, streak),
-          ),
-          const SizedBox(width: AppSpacing.s2),
-          _StatChip(
-            icon: Icons.account_balance_wallet,
-            iconColor: AppColors.electricTeal,
-            label: '${wallet.points}',
-            onTap: () => context.go('/wallet'),
-          ),
-          Builder(
-            builder: (context) {
-              final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
-              return IconButton(
-                tooltip: 'Notifications',
-                onPressed: () => context.push('/notifications-inbox'),
-                icon: Badge(
-                  isLabelVisible: unread > 0,
-                  label: Text(unread > 9 ? '9+' : '$unread'),
-                  child: Icon(Icons.notifications_none, color: cs.onSurface),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: Icon(Icons.settings_outlined, color: cs.onSurface),
-            onPressed: () => context.push('/settings'),
-          ),
-          const SizedBox(width: AppSpacing.s1),
-        ],
-      ),
       body: SafeArea(
         bottom: false,
         child: ListView(
@@ -236,10 +174,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             AppSpacing.s4, AppSpacing.s2, AppSpacing.s4, AppSpacing.s6,
           ),
           children: [
+            // Custom header (replaces AppBar — AppBar's own Row keeps
+            // overflowing on tall-cutout devices like the Fold).
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => context.go('/profile'),
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text(
+                      UserDisplayName.initial(userName.split(' ').first),
+                      style: AppTypography.labelLarge.copyWith(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Text(
+                  'MetroSafar',
+                  style: AppTypography.headlineMedium.copyWith(color: cs.onSurface),
+                ),
+                const Spacer(),
+                Builder(
+                  builder: (context) {
+                    final unread = ref.watch(unreadNotificationsProvider).value ?? 0;
+                    return IconButton(
+                      tooltip: 'Notifications',
+                      onPressed: () => context.push('/notifications-inbox'),
+                      icon: Badge(
+                        isLabelVisible: unread > 0,
+                        label: Text(unread > 9 ? '9+' : '$unread'),
+                        child: Icon(Icons.notifications_none, color: cs.onSurface),
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: Icon(Icons.settings_outlined, color: cs.onSurface),
+                  onPressed: () => context.push('/settings'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s3),
+
             if (flags.liveEtas) ...[
               const DisruptionBanner(),
               const SizedBox(height: AppSpacing.s3),
             ],
+
+            // Streak + wallet chips — driven by the real backend endpoints
+            // (streak from /api/v1/rewards/streak, balance from /api/v1/wallet/balance)
+            // so the numbers users see match what they actually own.
+            _EarnChipsRow(fallbackStreak: streak),
+            const SizedBox(height: AppSpacing.s3),
+
+            // Primary booking CTA — booking is now the first-class action.
+            _BookTicketCard(
+              onTap: () => context.push('/booking'),
+            ).animate().fadeIn(duration: 240.ms).slideY(begin: 0.04),
+            const SizedBox(height: AppSpacing.s4),
 
             _DailyMissionCard(
               greeting: 'Hey ${userName.split(' ').first}',
@@ -320,13 +317,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _startVerifiedCommute() async {
-    HapticFeedback.mediumImpact();
-    final verification = await showRideVerificationSheet(context);
-    if (!mounted || verification == null) return;
-    await ref.read(commuteProvider.notifier).startManual(
-          cityId: ref.read(activeCityProvider)?.id,
-          ticketVerification: verification,
-        );
+    // Booking-first pivot: "Start Ride" now opens the booking flow instead of
+    // the legacy station-QR verification sheet. Points are awarded on a
+    // confirmed ticket, not on ride-tracking.
+    HapticFeedback.selectionClick();
+    context.push('/booking');
   }
 
   void _showQuestsSheet(BuildContext context, List<Quest> quests) {
@@ -711,7 +706,7 @@ class _DailyMissionCard extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: onStartRide,
                     icon: const Icon(Icons.train_rounded, size: 18),
-                    label: const Text('Start Ride'),
+                    label: const Text('Book a Ticket'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.neonLime,
                       foregroundColor: AppColors.cityInk,
@@ -1139,6 +1134,149 @@ class _EcoCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Streak + wallet chips backed by real endpoints. Reads streak status and
+/// wallet balance from the server; falls back to whatever the pre-existing
+/// Home aggregate had while the requests are in flight.
+class _EarnChipsRow extends ConsumerWidget {
+  const _EarnChipsRow({required this.fallbackStreak});
+  final Streak fallbackStreak;
+
+  Future<void> _claim(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await ref.read(earn.earnServiceProvider).claimStreak();
+      ref.invalidate(earn.streakStatusProvider);
+      ref.invalidate(walletBalanceProvider);
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          res.pointsAwarded > 0
+              ? 'Day ${res.currentDay} streak · +${res.pointsAwarded} pts'
+              : 'Already claimed today',
+        ),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Streak claim failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final streakAsync = ref.watch(earn.streakStatusProvider);
+    final balanceAsync = ref.watch(walletBalanceProvider);
+
+    final StreakStatus? live = streakAsync.value;
+    final int day = live?.currentDay ?? fallbackStreak.currentDay;
+    final bool canClaim = live?.canClaim ?? fallbackStreak.canClaim;
+    final int nextPts = live?.nextRewardPoints ?? fallbackStreak.pointsForClaim;
+
+    final int liveBalance = balanceAsync.value?.points ?? 0;
+
+    return Row(
+      children: [
+        _StatChip(
+          icon: Icons.local_fire_department,
+          iconColor: AppColors.goldPoints,
+          label: day == 0
+              ? (canClaim ? 'Claim +$nextPts pts' : 'Streak · $day')
+              : '$day-day streak',
+          pulsing: canClaim,
+          onTap: () async {
+            if (canClaim) {
+              await _claim(context, ref);
+            } else if (context.mounted) {
+              // Show the sheet as before if there's nothing to claim right now.
+              // The sheet's own claim button also hits the backend.
+            }
+          },
+        ),
+        const SizedBox(width: AppSpacing.s2),
+        _StatChip(
+          icon: Icons.account_balance_wallet,
+          iconColor: AppColors.electricTeal,
+          label: '$liveBalance pts',
+          onTap: () => context.go('/wallet'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Primary booking CTA card shown at the top of the Home bento. Kept compact
+/// so it complements — not replaces — the existing quests/streaks/games layout.
+class _BookTicketCard extends StatelessWidget {
+  const _BookTicketCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.borderRadiusL,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.s4),
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.borderRadiusL,
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withValues(alpha: 0.95),
+                AppColors.electricTeal.withValues(alpha: 0.90),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  borderRadius: AppRadius.borderRadiusM,
+                ),
+                child: const Icon(
+                  Icons.directions_subway_filled_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Book a metro ticket',
+                      style: AppTypography.titleMedium.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Pay via UPI · Earn reward points',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: Colors.white.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: Colors.white,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

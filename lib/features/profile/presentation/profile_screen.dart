@@ -16,8 +16,14 @@ import '../../../services/user_display_name.dart';
 
 final profileProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final svc = BackendService();
-  final data = await svc.getProfile();
-  return data['profile'] as Map<String, dynamic>? ?? data;
+  try {
+    final data = await svc.getProfile();
+    return data['profile'] as Map<String, dynamic>? ?? data;
+  } catch (_) {
+    // Backend /api/profile isn't deployed yet — degrade to an empty profile
+    // so screens can render zeros instead of an error state.
+    return const <String, dynamic>{};
+  }
 });
 
 /// Identity + activity only. Preferences, legal and account actions now live

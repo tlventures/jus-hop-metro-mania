@@ -18,9 +18,11 @@ import 'app/router.dart' as router_module;
 import 'core/city/city_theme_provider.dart';
 import 'core/city/current_city_provider.dart';
 import 'design_system/theme.dart';
+import 'features/booking/application/ticketing_provider.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'core/compliance/minor_status.dart';
 import 'services/analytics_service.dart';
+import 'services/admob_config.dart';
 import 'services/backend_service.dart';
 import 'services/connectivity_watcher.dart';
 import 'services/localization_service.dart';
@@ -80,6 +82,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
       _wireAuthBoundServices();
       await router_module.initializeRouter();
       ConnectivityWatcher.instance.start(BackendService());
+      AdMobConfig.assertProductionIds();
       unawaited(MobileAds.instance.initialize());
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -247,6 +250,9 @@ class MetroSafarApp extends ConsumerStatefulWidget {
 }
 
 class _MetroSafarAppState extends ConsumerState<MetroSafarApp> {
+  StreamSubscription<User?>? _authSub;
+  String? _lastAuthUid;
+
   @override
   void initState() {
     super.initState();
@@ -256,6 +262,22 @@ class _MetroSafarAppState extends ConsumerState<MetroSafarApp> {
       // Onboarding will reinitialize if the user hasn't set a city yet.
       ref.read(currentCityProvider.notifier).initialize();
     });
+    // Booking state carries a transaction_id owned by the previous Firebase
+    // user; drop it whenever the auth user changes (sign-out, switch, expiry).
+    _lastAuthUid = FirebaseAuth.instance.currentUser?.uid;
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      final nextUid = user?.uid;
+      if (nextUid != _lastAuthUid) {
+        _lastAuthUid = nextUid;
+        ref.read(ticketingNotifierProvider.notifier).resetForAuthChange();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   @override
