@@ -6,13 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../design_system/components/ad_banner.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../models/metro_station.dart';
 import '../../../services/location_service.dart';
+import '../../promo/promo_banner.dart';
 import '../application/ticketing_provider.dart';
 
 class StationSearchScreen extends ConsumerStatefulWidget {
@@ -234,11 +234,12 @@ class _StationSearchScreenState extends ConsumerState<StationSearchScreen> {
                 ),
               ],
 
-              // Ad slot — this is a browsing screen, not a payment step, so it
-              // is a policy-safe place for an ad. The Spacer below keeps it well
-              // clear of the Continue button.
+              // Admin-managed banner slot. Shows whatever the dashboard sets
+              // for 'booking_top' — a clickable house promo, the AdMob ad, or
+              // nothing — defaulting to the ad. Browsing context, kept clear of
+              // the Continue button by the Spacer below.
               const SizedBox(height: AppSpacing.s4),
-              const Center(child: MetroSafarAdBanner()),
+              const SlotBanner(slot: 'booking_top'),
 
               const Spacer(),
 

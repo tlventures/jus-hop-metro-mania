@@ -88,7 +88,7 @@ const stationWords = stations.slice(0, 18).map((station) => station.name);
 // without a redeploy.  Falls back to staticData if Firestore is empty.
 // ---------------------------------------------------------------------------
 
-const CATALOG_TYPES = ['rewards', 'games', 'articles', 'surveys', 'quests', 'videos'];
+const CATALOG_TYPES = ['rewards', 'games', 'articles', 'surveys', 'quests', 'videos', 'banners'];
 
 /** In-memory catalog: { rewards:[], games:[], articles:[], surveys:[], quests:[], videos:[] } */
 const catalog = {
@@ -1447,7 +1447,7 @@ const PUBLIC_API_ROUTES = [
   { method: 'POST', pattern: /^\/v2\/waitlist$/ },
   { method: 'POST', pattern: /^\/internal\/weekly-digest\/run$/ },
   // Static catalog endpoints — CDN-cacheable, no auth needed (B4)
-  { method: 'GET',  pattern: /^\/catalog\/(rewards|games|articles|surveys|quests|videos)$/ },
+  { method: 'GET',  pattern: /^\/catalog\/(rewards|games|articles|surveys|quests|videos|banners)$/ },
 ];
 
 function isPublicApiRoute(req) {
@@ -3763,6 +3763,24 @@ const catalogVideoSchema = z.object({
 });
 
 // Mapping of catalog type → zod schema
+// Admin-managed promotional banner. Each slot in the app shows the highest-
+// priority (lowest sortOrder) active banner for that slot. `kind` lets an admin
+// choose, per slot, between a clickable house promo, the AdMob ad, or nothing.
+const catalogBannerSchema = z.object({
+  slot:       z.enum(['booking_top', 'home_top', 'ticket_bottom', 'wallet_top']),
+  kind:       z.enum(['promo', 'admob', 'none']).optional().default('promo'),
+  title:      z.string().trim().max(120).optional().default(''),
+  subtitle:   z.string().trim().max(200).optional().default(''),
+  imageUrl:   z.string().trim().max(500).optional().default(''),
+  ctaLabel:   z.string().trim().max(40).optional().default(''),
+  // internal → app route (e.g. /wallet); external → https URL opened in browser.
+  linkType:   z.enum(['internal', 'external']).optional().default('internal'),
+  linkTarget: z.string().trim().max(500).optional().default(''),
+  bgColor:    z.string().trim().max(9).optional().default(''),
+  active:     z.boolean().optional().default(true),
+  sortOrder:  z.number().int().min(0).optional().default(0),
+});
+
 const CATALOG_SCHEMAS = {
   rewards:  catalogRewardSchema,
   games:    catalogGameSchema,
@@ -3770,6 +3788,7 @@ const CATALOG_SCHEMAS = {
   surveys:  catalogSurveySchema,
   quests:   catalogQuestSchema,
   videos:   catalogVideoSchema,
+  banners:  catalogBannerSchema,
 };
 
 // Quest IDs reference user completion state — protect them from rename.
