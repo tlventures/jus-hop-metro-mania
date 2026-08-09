@@ -43,6 +43,10 @@ enum BookingStatus {
   paymentPending,
   paymentVerifying,
   ticketConfirmed,
+  // Payment was captured but the metro could not issue the ticket. The money
+  // is being returned automatically — a terminal, non-error outcome the UI
+  // must present reassuringly, not as a failure the user caused.
+  refundInitiated,
   error,
 }
 
@@ -80,6 +84,10 @@ class TicketingState {
   final String? errorMessage;
   final RazorpayCheckout? pendingCheckout;
 
+  /// Reference to show the user when a refund is initiated (Razorpay refund id,
+  /// or the transaction id as a fallback so support can trace it).
+  final String? refundReference;
+
   const TicketingState({
     this.status = BookingStatus.idle,
     this.originStation,
@@ -93,6 +101,7 @@ class TicketingState {
     this.activeTicket,
     this.errorMessage,
     this.pendingCheckout,
+    this.refundReference,
   });
 
   TicketingState copyWith({
@@ -108,6 +117,7 @@ class TicketingState {
     MetroTicket? activeTicket,
     String? errorMessage,
     RazorpayCheckout? pendingCheckout,
+    String? refundReference,
     bool clearError = false,
     bool clearCheckout = false,
   }) {
@@ -124,6 +134,7 @@ class TicketingState {
       activeTicket: activeTicket ?? this.activeTicket,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       pendingCheckout: clearCheckout ? null : (pendingCheckout ?? this.pendingCheckout),
+      refundReference: refundReference ?? this.refundReference,
     );
   }
 }
@@ -360,19 +371,55 @@ class TicketingNotifier extends StateNotifier<TicketingState> {
       );
       return true;
     } on TicketingAuthRequiredException catch (e) {
-      state = state.copyWith(status: BookingStatus.error, errorMessage: e.toString());
+      await _autoRefundAfterFailure(razorpayPaymentId, e.toString());
       return false;
     } on TicketingApiException catch (e) {
-      state = state.copyWith(status: BookingStatus.error, errorMessage: e.message);
+      await _autoRefundAfterFailure(razorpayPaymentId, e.message);
       return false;
     } catch (e) {
       if (kDebugMode) debugPrint('confirmPayment error: $e');
-      state = state.copyWith(
-        status: BookingStatus.error,
-        errorMessage: 'Payment verification failed. If money was deducted it will auto-refund.',
+      await _autoRefundAfterFailure(
+        razorpayPaymentId,
+        'We could not issue your ticket.',
       );
       return false;
     }
+  }
+
+  /// Reached only after Razorpay reported SUCCESS — so the payment WAS captured
+  /// — but the metro could not issue the ticket. Money must go back.
+  ///
+  /// Asks the server to refund. The server refunds only a captured-and-
+  /// unconfirmed payment, so this cannot be abused, and it auto-refunds such
+  /// captures itself regardless — the client call just triggers it sooner and
+  /// gets a reference. Either way the outcome for the user is the same, so we
+  /// always land in [BookingStatus.refundInitiated], never a bare error.
+  Future<void> _autoRefundAfterFailure(String razorpayPaymentId, String reason) async {
+    final txn = state.transactionId;
+    if (txn == null) {
+      state = state.copyWith(status: BookingStatus.error, errorMessage: reason);
+      return;
+    }
+
+    String? refundRef;
+    try {
+      final res = await _service.requestRefund(
+        transactionId: txn,
+        razorpayPaymentId: razorpayPaymentId,
+      );
+      refundRef = (res['refund_id'] ?? res['refund_reference']) as String?;
+    } catch (e) {
+      // Non-fatal: the backend auto-refunds unconfirmed captures on its own, so
+      // the user's money is safe even if this trigger call failed.
+      if (kDebugMode) debugPrint('requestRefund failed (backend auto-refund still applies): $e');
+    }
+
+    state = state.copyWith(
+      status: BookingStatus.refundInitiated,
+      refundReference: refundRef ?? txn,
+      errorMessage: reason,
+      clearCheckout: true,
+    );
   }
 
   void reportPaymentCancelled() {

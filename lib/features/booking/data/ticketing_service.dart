@@ -185,6 +185,31 @@ class TicketingService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  /// Ask the server to refund a payment that was captured but whose ticket
+  /// could not be issued (payment succeeded, /confirm failed).
+  ///
+  /// The client cannot move money — it can only request. The server verifies
+  /// the transaction is in a captured-but-unconfirmed state before refunding
+  /// via Razorpay, so replaying this is safe (idempotency key is the txn).
+  /// Returns { refund_id, status, amount } when available.
+  Future<Map<String, dynamic>> requestRefund({
+    required String transactionId,
+    required String razorpayPaymentId,
+    String reason = 'ticket_issue_failed',
+  }) async {
+    final response = await _postJson(
+      _uri('/api/v1/refund'),
+      idempotencyKey: 'refund:$transactionId',
+      body: {
+        'transaction_id': transactionId,
+        'razorpay_payment_id': razorpayPaymentId,
+        'reason': reason,
+      },
+      opLabel: 'requestRefund',
+    );
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   /// Verify Razorpay payment server-side (HMAC signature), then send /confirm
   /// to the BPP. Returns the signed MetroTicket the server issued.
   Future<MetroTicket> confirmPayment({

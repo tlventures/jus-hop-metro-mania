@@ -12,6 +12,7 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../application/ticketing_provider.dart';
+import 'booking_progress_view.dart';
 
 /// Booking checkout for unreserved SJT/RJT tickets.
 ///
@@ -132,9 +133,27 @@ class _BookingCheckoutScreenState extends ConsumerState<BookingCheckoutScreen> {
     final option = state.selectedOption;
     final displayAmount = (option?.fare ?? 0) * state.passengerCount;
 
+    // Once Razorpay has returned success we're in the two-phase confirmation:
+    // show the timeline (confirming, or refunding on failure) instead of the
+    // checkout form. Payment can't be re-initiated from here.
+    final showTimeline = state.status == BookingStatus.paymentVerifying ||
+        state.status == BookingStatus.refundInitiated;
+    if (showTimeline) {
+      return Scaffold(
+        appBar: AppBar(automaticallyImplyLeading: false),
+        body: BookingProgressView(
+          status: state.status,
+          fromStation: state.originStation?.name ?? '—',
+          toStation: state.destinationStation?.name ?? '—',
+          fareLabel: '₹${displayAmount.toStringAsFixed(0)}',
+          refundReference: state.refundReference,
+          onDone: () => context.go('/home'),
+        ),
+      );
+    }
+
     final isBusy = state.status == BookingStatus.bookingInInit
-        || state.status == BookingStatus.paymentPending
-        || state.status == BookingStatus.paymentVerifying;
+        || state.status == BookingStatus.paymentPending;
 
     return Scaffold(
       appBar: AppBar(

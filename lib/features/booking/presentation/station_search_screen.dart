@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../design_system/components/ad_banner.dart';
 import '../../../design_system/tokens/colors.dart';
 import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
@@ -232,6 +233,12 @@ class _StationSearchScreenState extends ConsumerState<StationSearchScreen> {
                   ),
                 ),
               ],
+
+              // Ad slot — this is a browsing screen, not a payment step, so it
+              // is a policy-safe place for an ad. The Spacer below keeps it well
+              // clear of the Continue button.
+              const SizedBox(height: AppSpacing.s4),
+              const Center(child: MetroSafarAdBanner()),
 
               const Spacer(),
 
