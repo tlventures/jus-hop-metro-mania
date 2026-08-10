@@ -138,6 +138,36 @@ def complete(flow_state: dict[str, Any]) -> bool:
     return all(s.get("status") in {"COMPLETE", "INPUT-REQUIRED", "SUCCESS"} for s in non_bap_steps)
 
 
+def error_steps(flow_state: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        s
+        for s in flow_state.get("sequence") or []
+        if (s.get("payloads") or {}).get("subStatus") == "ERROR"
+    ]
+
+
+def input_required_bpp_step(flow_state: dict[str, Any]) -> dict[str, Any] | None:
+    for step in flow_state.get("sequence") or []:
+        if step.get("owner") != "BAP" and step.get("status") == "INPUT-REQUIRED":
+            return step
+    return None
+
+
+def proceed_flow(client: httpx.Client, args: argparse.Namespace, transaction_id: str) -> dict[str, Any]:
+    response = client.post(
+        f"{WORKBENCH_UI_BASE}/flow/proceed",
+        json={
+            "session_id": args.session_id,
+            "transaction_id": transaction_id,
+            "json_path_changes": {},
+            "inputs": {},
+        },
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
 def summarize(flow_state: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for step in flow_state.get("sequence") or []:
@@ -205,16 +235,40 @@ def run_flow(client: httpx.Client, args: argparse.Namespace, flow_id: str) -> di
         result["error"] = "Initial BAP request was not ACKed"
         return result
     sent_action_ids = {first_step.get("actionId")}
+    proceeded_action_ids: set[str] = set()
     start_time = time.time()
-    max_flow_seconds = 120.0
+    max_flow_seconds = args.max_flow_seconds
 
     while time.time() - start_time < max_flow_seconds:
         flow_state = current_state(client, args.session_id, transaction_id)
         last_state = flow_state
+        driver.learn_identifiers_from_flow_state(base, client, flow_state)
         if complete(flow_state):
             result["ok"] = True
             result["summary"] = summarize(flow_state)
             return result
+
+        errors = error_steps(flow_state)
+        if errors:
+            result["error"] = "Flow reported ERROR subStatus"
+            result["summary"] = summarize(flow_state)
+            result["errorSteps"] = [step.get("actionId") for step in errors]
+            return result
+
+        proceed_step = input_required_bpp_step(flow_state)
+        proceed_action_id = proceed_step.get("actionId") if proceed_step else None
+        if proceed_action_id and proceed_action_id not in proceeded_action_ids:
+            proceeded_action_ids.add(proceed_action_id)
+            proceed_response = proceed_flow(client, args, transaction_id)
+            result.setdefault("proceeded_steps", []).append(
+                {
+                    "actionId": proceed_action_id,
+                    "response": proceed_response,
+                }
+            )
+            print(f"  {proceed_action_id} proceed: {proceed_response.get('success')}", flush=True)
+            time.sleep(args.poll_delay)
+            continue
 
         step = driver.next_bap_step(flow_state)
         if step and step.get("actionId") not in sent_action_ids:
@@ -280,6 +334,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--static-terms-url", default="https://ondc.metrosafar.in/terms")
     parser.add_argument("--poll-delay", type=float, default=2.0)
     parser.add_argument("--final-wait-polls", type=int, default=35)
+    parser.add_argument("--max-flow-seconds", type=float, default=240.0)
     parser.add_argument("--max-steps", type=int, default=40)
     parser.add_argument("--request-timeout", type=float, default=20.0)
     parser.add_argument("--output", type=Path, default=None)

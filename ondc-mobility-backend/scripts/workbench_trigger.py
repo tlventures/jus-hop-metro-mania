@@ -224,6 +224,8 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
             }
         }
     if action == "status":
+        if getattr(args, "status_ref_id", None):
+            return {"ref_id": args.status_ref_id}
         return {"order_id": args.order_id}
     if action == "cancel":
         return {
@@ -278,10 +280,9 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
                         ],
                     }
                 ]
-        elif "partial_cancellation" in action_id_lower:
+        elif getattr(args, "partial_cancellation", False) or "partial_cancellation" in action_id_lower:
             update_target = "order.fulfillments"
-            step_num = 2 if action_id.endswith("_2") else 1
-            cancel_code = "SOFT_CANCEL" if step_num == 1 else "CONFIRM_CANCEL"
+            cancel_code = args.cancel_code
             order["fulfillments"] = [
                 {
                     "id": args.fulfillment_id,
@@ -290,7 +291,7 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
             ]
             order["cancellation"] = {
                 "reason": {
-                    "id": "001",
+                    "id": args.reason_id or "001",
                     "descriptor": {"code": cancel_code},
                 }
             }

@@ -136,6 +136,80 @@ def _catalog_ticket_selection(flow_state: dict[str, Any] | None, ticket_code: st
     return None
 
 
+def complete_payloads(client: httpx.Client, payload_ids: list[str]) -> list[dict[str, Any]]:
+    if not payload_ids:
+        return []
+    response = client.post(f"{WORKBENCH_UI_BASE}/db/payload", json={"payload_ids": payload_ids})
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else []
+
+
+def _apply_payload_identifiers(args: argparse.Namespace, payload: dict[str, Any]) -> None:
+    message = payload.get("message", {}) if isinstance(payload, dict) else {}
+    order = message.get("order", {}) if isinstance(message, dict) else {}
+    catalog = message.get("catalog", {}) if isinstance(message, dict) else {}
+
+    order_id = order.get("id") if isinstance(order, dict) else None
+    if order_id:
+        args.order_id = str(order_id)
+
+    provider = order.get("provider", {}) if isinstance(order, dict) else {}
+    provider_id = provider.get("id") if isinstance(provider, dict) else None
+    if provider_id:
+        args.provider_id = str(provider_id)
+
+    items = order.get("items", []) if isinstance(order, dict) else []
+    if isinstance(items, list) and items and isinstance(items[0], dict):
+        item = items[0]
+        if item.get("id"):
+            args.item_id = str(item["id"])
+        price = item.get("price") if isinstance(item.get("price"), dict) else {}
+        if price.get("value") is not None:
+            args.amount = str(price["value"])
+
+    providers = catalog.get("bpp_providers", []) if isinstance(catalog, dict) else []
+    if isinstance(providers, list) and providers and isinstance(providers[0], dict):
+        ticket_code = _ticket_code_for(getattr(args, "flow_id", ""), getattr(args, "action_id", ""))
+        if ticket_code:
+            selection = _catalog_ticket_selection({"catalog": catalog}, ticket_code)
+            if selection:
+                args.item_id = selection["item_id"]
+                if selection.get("provider_id"):
+                    args.provider_id = selection["provider_id"]
+                if selection.get("amount"):
+                    args.amount = selection["amount"]
+                return
+        args.provider_id = str(providers[0].get("id") or args.provider_id)
+        provider_items = providers[0].get("items", [])
+        if isinstance(provider_items, list) and provider_items and isinstance(provider_items[0], dict) and provider_items[0].get("id"):
+            args.item_id = str(provider_items[0]["id"])
+
+
+def learn_identifiers_from_flow_state(args: argparse.Namespace, client: httpx.Client, flow_state: dict[str, Any]) -> None:
+    payload_cache = getattr(args, "_workbench_payload_cache", None)
+    if payload_cache is None:
+        payload_cache = {}
+        setattr(args, "_workbench_payload_cache", payload_cache)
+
+    payload_ids: list[str] = []
+    for step in flow_state.get("sequence") or []:
+        if step.get("owner") != "BPP" or step.get("status") != "COMPLETE":
+            continue
+        payloads = (step.get("payloads") or {}).get("payloads") or []
+        for item in payloads:
+            payload_id = item.get("payloadId")
+            if payload_id and payload_id not in payload_cache:
+                payload_ids.append(payload_id)
+
+    for payload_id, item in zip(payload_ids, complete_payloads(client, payload_ids)):
+        payload_cache[payload_id] = item.get("req") if isinstance(item, dict) else None
+
+    for payload in payload_cache.values():
+        if isinstance(payload, dict):
+            _apply_payload_identifiers(args, payload)
+
+
 def _apply_ticket_selection(args: argparse.Namespace, action: str, flow_state: dict[str, Any] | None) -> None:
     if action not in {"select", "init", "confirm", "update"}:
         return
@@ -158,6 +232,7 @@ def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], 
     args.action = action
 
     args.flow_id = str(base_args.flow_id or session.get("activeFlow") or "")
+    flow_id_lower = args.flow_id.lower()
     args.domain = str(session.get("domain") or getattr(args, "domain", "ONDC:TRV11")).strip("/")
     args.version = str(session.get("version") or getattr(args, "version", "2.0.0")).strip("/")
 
@@ -239,15 +314,23 @@ def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], 
                 args.message_id = msg_ids["confirm"]
 
     if action == "cancel":
-        if "tech" in action_id.lower() or "hard" in action_id.lower():
+        action_id_lower = action_id.lower()
+        if "tech" in action_id_lower or "hard" in action_id_lower or "confirm" in action_id_lower or action_id_lower.endswith("_2"):
             args.cancel_code = "CONFIRM_CANCEL"
-            args.cancel_name = "Confirm Cancellation"
         else:
             args.cancel_code = "SOFT_CANCEL"
-            args.cancel_name = "Ride Cancellation"
-    if action == "update" and "partial_cancellation" in action_id.lower():
+        args.cancel_name = "Ride Cancellation"
+        args.reason_id = "000" if "tech" in action_id_lower else "7"
+    if action == "status" and "tech_cancel" in action_id.lower():
+        args.status_ref_id = args.transaction_id
+    if action == "update" and ("partial_cancellation" in flow_id_lower or "partial_cancellation" in action_id.lower()):
+        args.partial_cancellation = True
         args.fulfillment_id = "F2"
         args.reason_id = "001"
+        if action_id.endswith("202") or action_id.endswith("_2"):
+            args.cancel_code = "CONFIRM_CANCEL"
+        else:
+            args.cancel_code = "SOFT_CANCEL"
     _apply_ticket_selection(args, action, flow_state)
     return args
 
@@ -276,6 +359,7 @@ def run_once(args: argparse.Namespace, client: httpx.Client) -> bool:
 
     args.transaction_id = transaction_id
     flow_state = current_flow_state(client, args.session_id, transaction_id)
+    learn_identifiers_from_flow_state(args, client, flow_state)
     step = next_bap_step(flow_state)
 
     print(f"session_id={args.session_id}")
