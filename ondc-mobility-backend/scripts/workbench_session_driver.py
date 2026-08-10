@@ -245,6 +245,9 @@ def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], 
         else:
             args.cancel_code = "SOFT_CANCEL"
             args.cancel_name = "Ride Cancellation"
+    if action == "update" and "partial_cancellation" in action_id.lower():
+        args.fulfillment_id = "F2"
+        args.reason_id = "001"
     _apply_ticket_selection(args, action, flow_state)
     return args
 

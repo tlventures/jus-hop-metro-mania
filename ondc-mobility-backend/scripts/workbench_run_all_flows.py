@@ -128,7 +128,7 @@ def complete(flow_state: dict[str, Any]) -> bool:
     if not bap_steps or not all(s.get("status") == "COMPLETE" for s in bap_steps):
         return False
 
-    if any((s.get("payloads") or {}).get("subStatus") == "ERROR" for s in bap_steps):
+    if any((s.get("payloads") or {}).get("subStatus") == "ERROR" for s in sequence):
         return False
 
     if flow_state.get("extraSteps"):

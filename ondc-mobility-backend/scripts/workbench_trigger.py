@@ -224,9 +224,6 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
             }
         }
     if action == "status":
-        action_id = getattr(args, "action_id", "").lower()
-        if "tech_cancel" in action_id or "cancel" in action_id:
-            return {"ref_id": args.order_id}
         return {"order_id": args.order_id}
     if action == "cancel":
         return {
@@ -288,12 +285,12 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
             order["fulfillments"] = [
                 {
                     "id": args.fulfillment_id,
-                    "type": "TICKET",
+                    "type": "TRIP",
                 }
             ]
             order["cancellation"] = {
                 "reason": {
-                    "id": args.reason_id or "001",
+                    "id": "001",
                     "descriptor": {"code": cancel_code},
                 }
             }
