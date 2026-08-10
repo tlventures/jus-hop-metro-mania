@@ -135,7 +135,7 @@ def complete(flow_state: dict[str, Any]) -> bool:
         return False
 
     non_bap_steps = [s for s in sequence if s.get("owner") != "BAP"]
-    return all(s.get("status") in {"COMPLETE", "INPUT-REQUIRED", "SUCCESS"} for s in non_bap_steps)
+    return all(s.get("status") in {"COMPLETE", "SUCCESS"} for s in non_bap_steps)
 
 
 def error_steps(flow_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -148,7 +148,7 @@ def error_steps(flow_state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def input_required_bpp_step(flow_state: dict[str, Any]) -> dict[str, Any] | None:
     for step in flow_state.get("sequence") or []:
-        if step.get("owner") != "BAP" and step.get("status") == "INPUT-REQUIRED":
+        if step.get("owner") != "BAP" and step.get("status") in {"INPUT-REQUIRED", "INACTIVE"}:
             return step
     return None
 
@@ -243,10 +243,6 @@ def run_flow(client: httpx.Client, args: argparse.Namespace, flow_id: str) -> di
         flow_state = current_state(client, args.session_id, transaction_id)
         last_state = flow_state
         driver.learn_identifiers_from_flow_state(base, client, flow_state)
-        if complete(flow_state):
-            result["ok"] = True
-            result["summary"] = summarize(flow_state)
-            return result
 
         errors = error_steps(flow_state)
         if errors:
@@ -269,6 +265,11 @@ def run_flow(client: httpx.Client, args: argparse.Namespace, flow_id: str) -> di
             print(f"  {proceed_action_id} proceed: {proceed_response.get('success')}", flush=True)
             time.sleep(args.poll_delay)
             continue
+
+        if complete(flow_state):
+            result["ok"] = True
+            result["summary"] = summarize(flow_state)
+            return result
 
         step = driver.next_bap_step(flow_state)
         if step and step.get("actionId") not in sent_action_ids:
