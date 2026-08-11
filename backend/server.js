@@ -1673,37 +1673,12 @@ app.post('/api/devices/token', validate(z.object({
 });
 
 // ---------------------------------------------------------------------------
-// DPDPA §9 — Parental consent request for under-18 users.
-// POST /api/auth/parental-consent-request
-// Sends a verification email to the parent; stores pending record.
+// DPDPA §9 — MetroSafar does not process personal data of under-18 users.
+// The age gate stops them in onboarding (see age_restricted_screen.dart), so
+// there is no parental-consent flow and no guardian contact details are
+// collected. The previous endpoint responded "Verification email requested"
+// while sending no email — a false statement — and has been removed.
 // ---------------------------------------------------------------------------
-app.post('/api/auth/parental-consent-request', accountLimiter, async (req, res, next) => {
-  try {
-    const { parentEmail } = req.body;
-    if (!parentEmail || typeof parentEmail !== 'string' || !parentEmail.includes('@')) {
-      return res.status(400).json({ error: 'Valid parent email required' });
-    }
-    const token = require('crypto').randomBytes(24).toString('hex');
-    await firestore.collection('metrosafar_parental_consents').doc(req.clientId).set({
-      childUid: req.clientId,
-      parentEmail: parentEmail.trim().toLowerCase(),
-      status: 'pending',
-      token,
-      createdAt: new Date().toISOString(),
-      verifiedAt: null,
-    }, { merge: true });
-
-    // TODO: send email via SendGrid / Firebase Extensions with:
-    //   link: https://metrosafar.app/parental-verify?token=<token>
-    // For now, log for manual verification during early launch.
-    logger.info({ childUid: req.clientId, parentEmail: parentEmail.trim().toLowerCase() },
-      'Parental consent request — send verification email');
-
-    res.json({ ok: true, message: 'Verification email requested' });
-  } catch (error) {
-    next(error);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // DPDPA Consent audit trail

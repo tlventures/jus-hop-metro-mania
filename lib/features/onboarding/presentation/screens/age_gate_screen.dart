@@ -13,7 +13,7 @@ import '../../../../design_system/tokens/typography.dart';
 /// There is no skip button.  Completing this screen stores the DOB via
 /// [MinorStatus.setDob()] and routes to either:
 ///   • [onAdult]  — age ≥ 18, proceed normally
-///   • [onMinor]  — age < 18, proceed to parental-consent flow
+///   • [onMinor]  — age < 18, stop (MetroSafar is 18+; AgeRestrictedScreen)
 class AgeGateScreen extends StatefulWidget {
   final VoidCallback onAdult;
   final VoidCallback onMinor;

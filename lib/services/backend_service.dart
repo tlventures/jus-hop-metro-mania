@@ -119,17 +119,6 @@ class BackendService {
     );
   }
 
-  /// DPDPA §9: request a parental consent verification email for a minor.
-  Future<Map<String, dynamic>> requestParentalConsent({
-    required String parentEmail,
-  }) {
-    return _sendJson(
-      'POST',
-      '/api/auth/parental-consent-request',
-      body: {'parentEmail': parentEmail},
-    );
-  }
-
   /// DPDPA: record consent decision to the append-only server-side audit log.
   /// Fire-and-forget safe — caller should not block on failure.
   Future<void> recordConsent({
