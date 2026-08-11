@@ -693,7 +693,7 @@ class _DailyMissionCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   rewardTarget > 0
-                      ? 'Up to +$rewardTarget pts today'
+                      ? 'Earn up to +$rewardTarget pts on today’s rides'
                       : 'All caught up today 🎉',
                   style: AppTypography.titleMedium.copyWith(
                     color: Colors.white,
@@ -703,10 +703,13 @@ class _DailyMissionCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.s3),
                 SizedBox(
                   height: 40,
+                  // This CTA STARTS A RIDE to earn points (verified commute) —
+                  // it does NOT buy a ticket. The label must say so, or it reads
+                  // as a duplicate of the "Book a metro ticket" card above.
                   child: FilledButton.icon(
                     onPressed: onStartRide,
-                    icon: const Icon(Icons.train_rounded, size: 18),
-                    label: const Text('Book a Ticket'),
+                    icon: const Icon(Icons.near_me_rounded, size: 18),
+                    label: const Text('Start a ride'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.neonLime,
                       foregroundColor: AppColors.cityInk,
