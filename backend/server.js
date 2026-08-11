@@ -103,6 +103,11 @@ const catalog = {
     { id: 'station_quiz',   title: 'Answer a station quiz', description: 'Test your metro knowledge',            points: 25, type: 'station_quiz_completed', active: true },
   ],
   videos:   staticData.videos   || [],
+  // Admin-managed promo banners. No seed file — starts empty; populated live
+  // from Firestore (catalog_banners) via the snapshot subscription. Must exist
+  // as [] here so the public /api/catalog/banners handler doesn't read
+  // `.length` of undefined before the first Firestore load.
+  banners:  [],
 };
 
 /**
