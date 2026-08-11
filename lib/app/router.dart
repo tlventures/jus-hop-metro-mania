@@ -18,9 +18,7 @@ import '../features/play/games/sudoku_screen.dart';
 import '../features/play/games/word_puzzle_screen.dart';
 import '../features/play/games/city_explorer_screen.dart';
 import '../features/learn/presentation/learn_hub_screen.dart';
-import '../features/booking/presentation/station_search_screen.dart';
-import '../features/booking/presentation/route_selection_screen.dart';
-import '../features/booking/presentation/booking_checkout_screen.dart';
+import '../features/booking/presentation/booking_screen.dart';
 import '../features/booking/presentation/ticket_details_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
@@ -117,7 +115,7 @@ final GoRouter appRouter = GoRouter(
           // TripModeScreen (live commute tracking) is still available at
           // /commute for when the pivot to booking-first is complete.
           path: '/ride',
-          builder: (context, state) => const StationSearchScreen(),
+          builder: (context, state) => const BookingScreen(),
         ),
         GoRoute(
           path: '/commute',
@@ -164,17 +162,12 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => gameScreenFor(state.pathParameters['gameId'] ?? 'daily_spin'),
     ),
     GoRoute(
+      // Single-screen booking: pick stations, ticket, passengers and pay here.
+      // The old three-step flow (StationSearch → RouteSelection → Checkout) is
+      // folded into BookingScreen. The confirmed-ticket detail screen remains.
       path: '/booking',
-      builder: (context, state) => const StationSearchScreen(),
+      builder: (context, state) => const BookingScreen(),
       routes: [
-        GoRoute(
-          path: 'routes',
-          builder: (context, state) => const RouteSelectionScreen(),
-        ),
-        GoRoute(
-          path: 'checkout',
-          builder: (context, state) => const BookingCheckoutScreen(),
-        ),
         GoRoute(
           path: 'ticket',
           builder: (context, state) => const TicketDetailsScreen(),
