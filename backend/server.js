@@ -471,6 +471,32 @@ const GAME_COMPLETION_POINTS = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// STATIC ADMIN API KEY — CI and local bootstrap only.
+//
+// A single non-expiring string that grants full superadmin cannot be rotated
+// per-operator, leaks through CI config and shell history, and leaves no
+// attributable audit trail. It is refused in production: real admins present a
+// Firebase ID token with a `role` custom claim; machine callers use a service
+// account.
+// ---------------------------------------------------------------------------
+const ADMIN_API_KEY_ALLOWED = process.env.NODE_ENV !== 'production';
+
+if (process.env.ADMIN_API_KEY && !ADMIN_API_KEY_ALLOWED) {
+  logger.warn('ADMIN_API_KEY is set but IGNORED in production. Use Firebase custom claims for admins.');
+}
+
+/** Constant-time comparison of a presented bearer token against ADMIN_API_KEY. */
+function isValidAdminApiKey(token) {
+  if (!ADMIN_API_KEY_ALLOWED) return false;
+  const configured = process.env.ADMIN_API_KEY;
+  if (!configured || !token) return false;
+  const a = Buffer.from(String(token));
+  const b = Buffer.from(configured);
+  if (a.length !== b.length) return false; // timingSafeEqual throws on mismatch
+  return crypto.timingSafeEqual(a, b);
+}
+
 function normalizeClientId(value) {
   if (!value || typeof value !== 'string') {
     return 'anonymous';
@@ -1481,9 +1507,8 @@ app.use(async (req, _res, next) => {
   const authHeader = req.header('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    // Static ADMIN_API_KEY bypass (CI / bootstrap) — let it through the /api
-    // auth gate so requireAdmin's key fallback can grant admin access.
-    if (process.env.ADMIN_API_KEY && token === process.env.ADMIN_API_KEY) {
+    // Static ADMIN_API_KEY bypass — CI / bootstrap only, refused in production.
+    if (isValidAdminApiKey(token)) {
       req.uid = 'api-key';
     } else {
       try {
@@ -3487,9 +3512,8 @@ async function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'Authorization header required' });
   }
 
-  // Static API key fallback (CI / local dev)
-  const adminKey = process.env.ADMIN_API_KEY;
-  if (adminKey && token === adminKey) {
+  // Static API key fallback — CI / local dev only, always false in production.
+  if (isValidAdminApiKey(token)) {
     req.admin = { uid: 'api-key', role: 'superadmin', cities: [], email: 'api-key@local' };
     return next();
   }
@@ -4403,19 +4427,24 @@ app.get('/api/admin/telemetry/events/recent', requireAdmin, async (_req, res, ne
 // ADMIN — TELEMETRY INGEST (called by mobile client outbox)
 // ---------------------------------------------------------------------------
 
+const TELEMETRY_MAX_EVENTS_PER_BATCH = 50;
+
 const telemetryBatchSchema = z.object({
   events: z.array(z.object({
-    schemaVersion: z.string().optional(),
+    schemaVersion: z.string().max(20).optional(),
     eventName: z.string().min(1).max(80),
-    eventId: z.string().optional(),
-    ts: z.string().optional(),
-    userId: z.string().optional(),
-    cityId: z.string().optional(),
+    // De-dup id, namespaced with the caller uid before use — never trusted as
+    // a raw document path.
+    eventId: z.string().trim().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+    ts: z.string().max(40).optional(),
+    cityId: z.string().trim().max(80).optional(),
     props: z.record(z.unknown()).optional(),
-  })).min(1).max(200),
+    // NOTE: `userId` is deliberately absent — it is set from the authenticated
+    // caller. Accepting it from the client allowed forged attribution.
+  })).min(1).max(TELEMETRY_MAX_EVENTS_PER_BATCH),
 });
 
-app.post('/api/telemetry/batch', async (req, res, next) => {
+app.post('/api/telemetry/batch', contentLimiter, async (req, res, next) => {
   try {
     const result = telemetryBatchSchema.safeParse(req.body);
     if (!result.success) {
@@ -4424,10 +4453,19 @@ app.post('/api/telemetry/batch', async (req, res, next) => {
     const { events } = result.data;
     const batch = firestore.batch();
     for (const ev of events) {
-      const ref = firestore.collection('telemetry_events').doc(ev.eventId || firestore.collection('_').doc().id);
+      // Namespace the doc id with the caller uid so a client can only ever
+      // address its own events; a raw client id let set() overwrite any doc.
+      const ref = ev.eventId
+        ? firestore.collection('telemetry_events').doc(`${req.clientId}:${ev.eventId}`)
+        : firestore.collection('telemetry_events').doc();
+      const ts = ev.ts ? new Date(ev.ts) : new Date();
       batch.set(ref, {
-        ...ev,
-        ts: ev.ts ? new Date(ev.ts) : new Date(),
+        schemaVersion: ev.schemaVersion || null,
+        eventName: ev.eventName,
+        cityId: ev.cityId || null,
+        props: ev.props || {},
+        userId: req.clientId, // attribution is server-authoritative
+        ts: Number.isNaN(ts.getTime()) ? new Date() : ts,
         _ingestedAt: new Date(),
       });
     }

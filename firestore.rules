@@ -81,10 +81,12 @@ service cloud.firestore {
     // ─── Waitlist ──────────────────────────────────────────────────────────
 
     match /waitlist/{entryId} {
-      // Anyone (even unauthenticated) can join the waitlist
-      allow create: if true;
+      // Waitlist signups go through POST /api/v2/waitlist (backend, Admin SDK),
+      // which is rate-limited and App-Check-gated. Direct client writes are
+      // denied: with `allow create: if true`, anyone who extracted the Firebase
+      // API key from the APK could write unlimited docs straight into the DB.
       allow read: if isAdmin();
-      allow update, delete: if isSuperAdmin();
+      allow write: if false;
     }
 
     // ─── Audit log ─────────────────────────────────────────────────────────
