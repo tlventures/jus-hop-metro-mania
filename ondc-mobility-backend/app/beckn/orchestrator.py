@@ -1,7 +1,7 @@
 import uuid
 import datetime
 import json
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -39,6 +39,7 @@ _CATALOG_UNIT_PRICE_INR: Dict[str, Decimal] = {
     "I1": Decimal("35.00"),  # Single Journey Ticket
     "I2": Decimal("60.00"),  # Return Journey Ticket
 }
+BUYER_FINDER_FEES_PERCENTAGE = Decimal("1")
 
 
 def _catalog_price(item_id: str) -> Decimal:
@@ -103,6 +104,43 @@ class BecknOrchestrator:
         if bpp_uri:
             context["bpp_uri"] = bpp_uri.replace("//seller", "/seller")
         return context
+
+    def _settlement_amount(self, amount: Optional[Any]) -> Optional[str]:
+        if amount is None:
+            return None
+        gross = Decimal(str(amount))
+        fee = (gross * BUYER_FINDER_FEES_PERCENTAGE / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        net = (gross - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return format(net, ".2f")
+
+    def _issue_sub_category(self, category: Optional[str]) -> str:
+        category_upper = str(category or "").upper()
+        if category_upper == "ORDER":
+            return "ORD101"
+        if category_upper == "PAYMENT":
+            return "PMT101"
+        return "FLM101"
+
+    async def _payment_id_from_on_init(self, transaction_id: uuid.UUID) -> str:
+        stmt = (
+            select(ProtocolMessage)
+            .where(
+                ProtocolMessage.transaction_id == str(transaction_id),
+                ProtocolMessage.direction == "inbound",
+                ProtocolMessage.action == "on_init",
+            )
+            .order_by(ProtocolMessage.created_at.desc())
+        )
+        result = await self.db.execute(stmt)
+        msg = result.scalars().first()
+        payments = (
+            ((msg.payload or {}).get("message") or {}).get("order", {}).get("payments", [])
+            if msg
+            else []
+        )
+        if isinstance(payments, list) and payments and isinstance(payments[0], dict) and payments[0].get("id"):
+            return str(payments[0]["id"])
+        return "PA1"
 
     async def record_protocol_message(
         self,
@@ -187,7 +225,7 @@ class BecknOrchestrator:
                 *settlement_terms,
             ]
         if amount is not None and not search:
-            settlement_terms.insert(0, {"descriptor": {"code": "SETTLEMENT_AMOUNT"}, "value": str(amount)})
+            settlement_terms.insert(0, {"descriptor": {"code": "SETTLEMENT_AMOUNT"}, "value": self._settlement_amount(amount)})
 
         return {
             "collected_by": "BAP",
@@ -480,7 +518,7 @@ class BecknOrchestrator:
                     "items": [{"id": item_id, "quantity": {"selected": {"count": passenger_count}}}],
                     "payments": [
                         {
-                            "id": "PA1",
+                            "id": await self._payment_id_from_on_init(transaction_id),
                             "collected_by": "BAP",
                             "status": "PAID",
                             "type": "PRE-ORDER",
@@ -516,7 +554,7 @@ class BecknOrchestrator:
         user_id: uuid.UUID,
         transaction_id: uuid.UUID,
         order_id: Optional[str] = None,
-        reason_id: str = "0",
+        reason_id: str = "001",
         descriptor_code: str = "SOFT_CANCEL",
         descriptor_name: str = "Ride Cancellation",
     ) -> Dict[str, Any]:
@@ -620,7 +658,6 @@ class BecknOrchestrator:
 
         return {
             "complainant_actions": complainant_actions,
-            "respondent_actions": [],
         }
 
     async def initiate_issue(
@@ -645,7 +682,9 @@ class BecknOrchestrator:
         issue_payload = {
             "id": str(issue.issue_id),
             "category": issue.category,
+            "sub_category": self._issue_sub_category(issue.category),
             "status": issue.status.value,
+            "issue_type": "ISSUE",
             "created_at": issue.created_at.isoformat() if issue.created_at else updated_at,
             "updated_at": updated_at,
             "complainant_info": {"person": {"name": "MetroSafar customer"}},
@@ -656,7 +695,7 @@ class BecknOrchestrator:
             "issue_actions": self._issue_actions(issue, updated_at),
         }
         if issue.status == IssueStatus.CLOSED:
-            issue_payload["rating"] = "THUMBS_UP"
+            issue_payload["rating"] = "THUMBS-UP"
             issue_payload["resolution"] = {"short_desc": issue.resolution or "Issue resolved."}
 
         payload = {
@@ -714,34 +753,33 @@ class BecknOrchestrator:
         complainant_actions = []
         for t in trail:
             if isinstance(t, dict) and t.get("action"):
+                complainant_action = "CLOSE" if t["action"] == "CLOSED" else t["action"]
                 complainant_actions.append({
-                    "complainant_action": t["action"],
+                    "complainant_action": complainant_action,
+                    "short_desc": t.get("note") or ("Complaint closed" if complainant_action == "CLOSE" else complainant_action),
                     "updated_at": t.get("timestamp", now_str),
-                    "updated_by": {"person": {"name": "MetroSafar customer"}}
+                    "updated_by": self._issue_actor(),
                 })
         if not complainant_actions:
+            complainant_action = "CLOSE" if action_type == "CLOSED" else action_type
             complainant_actions.append({
-                "complainant_action": action_type,
+                "complainant_action": complainant_action,
+                "short_desc": note or ("Complaint closed" if complainant_action == "CLOSE" else complainant_action),
                 "updated_at": now_str,
-                "updated_by": {"person": {"name": "MetroSafar customer"}}
+                "updated_by": self._issue_actor(),
             })
 
         issue_payload = {
             "id": str(issue.issue_id),
-            "category": issue.category or "FULFILMENT",
             "status": issue.status.value if isinstance(issue.status, IssueStatus) else str(issue.status),
             "created_at": issue.created_at.isoformat() if issue.created_at else now_str,
             "updated_at": now_str,
-            "description": {"short_desc": issue.category or "FULFILMENT", "long_desc": note or issue.description or "Issue update"},
-            "order_details": {"id": issue.order_id} if issue.order_id else {},
             "issue_actions": {
                 "complainant_actions": complainant_actions,
-                "respondent_actions": []
             }
         }
         if rating or issue.status == IssueStatus.CLOSED:
-            issue_payload["rating"] = rating or "THUMBS_UP"
-            issue_payload["resolution"] = {"short_desc": issue.resolution or note or "Issue resolved."}
+            issue_payload["rating"] = rating or "THUMBS-UP"
 
         payload = {
             "context": context,
@@ -1009,7 +1047,7 @@ class BecknOrchestrator:
         result = await self.db.execute(select(Issue).where(Issue.issue_id == parsed_id))
         issue = result.scalar_one_or_none()
         if not issue:
-            category_val = issue_payload.get("category", "FULFILMENT")
+            category_val = issue_payload.get("category", "FULFILLMENT")
             status_val = issue_payload.get("status", "OPEN")
             status_enum = IssueStatus(status_val) if status_val in IssueStatus._value2member_map_ else IssueStatus.OPEN
             desc_dict = issue_payload.get("description", {})
@@ -1019,7 +1057,7 @@ class BecknOrchestrator:
                 user_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
                 order_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
                 category=category_val,
-                sub_category=issue_payload.get("sub_category", "FLM01"),
+                sub_category=issue_payload.get("sub_category", "FLM101"),
                 issue_type=issue_payload.get("issue_type", "ISSUE"),
                 status=status_enum,
                 description=desc_str,

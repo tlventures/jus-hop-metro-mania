@@ -340,7 +340,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amount", default="60")
     parser.add_argument("--payment-txn-id", default=None)
     parser.add_argument("--order-id", default="077b248f")
-    parser.add_argument("--reason-id", default="7")
+    parser.add_argument("--reason-id", default="001")
     parser.add_argument("--cancel-code", default="SOFT_CANCEL")
     parser.add_argument("--cancel-name", default="Ride Cancellation")
     parser.add_argument("--update-target", default="order.fulfillments")
@@ -355,7 +355,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--issue-long-desc", default="Passenger needs assistance with the metro ticket journey.")
     parser.add_argument("--issue-resolution", default="Issue resolved by seller.")
     parser.add_argument("--issue-created-at", default=None)
-    parser.add_argument("--rating", default="THUMBS_UP")
+    parser.add_argument("--rating", default="THUMBS-UP")
 
     args = parser.parse_args()
     if args.list_flows:

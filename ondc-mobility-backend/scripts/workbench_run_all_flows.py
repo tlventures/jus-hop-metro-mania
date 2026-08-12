@@ -45,6 +45,7 @@ def base_args(args: argparse.Namespace) -> SimpleNamespace:
         passenger_phone=args.passenger_phone,
         passenger_email=args.passenger_email,
         amount=args.amount,
+        payment_id=None,
         payment_txn_id=None,
         order_id=args.order_id,
         reason_id=args.reason_id,
@@ -57,8 +58,8 @@ def base_args(args: argparse.Namespace) -> SimpleNamespace:
         static_terms_url=args.static_terms_url,
         issue_id=None,
         issue_status="OPEN",
-        issue_category="FULFILMENT",
-        issue_sub_category="FLM01",
+        issue_category="FULFILLMENT",
+        issue_sub_category="FLM101",
         issue_type="ISSUE",
         issue_action=None,
         issue_short_desc="Ticket journey support",
@@ -67,7 +68,8 @@ def base_args(args: argparse.Namespace) -> SimpleNamespace:
         issue_expected_response_time="PT2H",
         issue_expected_resolution_time="P1D",
         issue_created_at=None,
-        rating="THUMBS_UP",
+        issue_fulfillment_state="UNCLAIMED",
+        rating="THUMBS-UP",
         include_bpp_in_search=True,
     )
 
@@ -329,7 +331,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--passenger-email", default="test@metrosafar.in")
     parser.add_argument("--amount", default="60")
     parser.add_argument("--order-id", default="077b248f")
-    parser.add_argument("--reason-id", default="7")
+    parser.add_argument("--reason-id", default="001")
     parser.add_argument("--update-count", type=int, default=1)
     parser.add_argument("--update-end-code", default="MOCK_STATION_5")
     parser.add_argument("--static-terms-url", default="https://ondc.metrosafar.in/terms")

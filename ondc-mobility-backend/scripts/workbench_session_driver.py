@@ -149,6 +149,16 @@ def _apply_payload_identifiers(args: argparse.Namespace, payload: dict[str, Any]
     message = payload.get("message", {}) if isinstance(payload, dict) else {}
     order = message.get("order", {}) if isinstance(message, dict) else {}
     catalog = message.get("catalog", {}) if isinstance(message, dict) else {}
+    issue = message.get("issue", {}) if isinstance(message, dict) else {}
+
+    issue_actions = issue.get("issue_actions", {}) if isinstance(issue, dict) else {}
+    complainant_actions = issue_actions.get("complainant_actions") if isinstance(issue_actions, dict) else None
+    if isinstance(complainant_actions, list) and complainant_actions:
+        existing = list(getattr(args, "past_complainant_actions", []) or [])
+        for action in complainant_actions:
+            if action not in existing:
+                existing.append(action)
+        args.past_complainant_actions = existing
 
     order_id = order.get("id") if isinstance(order, dict) else None
     if order_id:
@@ -167,6 +177,28 @@ def _apply_payload_identifiers(args: argparse.Namespace, payload: dict[str, Any]
         price = item.get("price") if isinstance(item.get("price"), dict) else {}
         if price.get("value") is not None:
             args.amount = str(price["value"])
+
+    payments = order.get("payments", []) if isinstance(order, dict) else []
+    if isinstance(payments, list) and payments and isinstance(payments[0], dict) and payments[0].get("id"):
+        args.payment_id = str(payments[0]["id"])
+
+    fulfillments = order.get("fulfillments", []) if isinstance(order, dict) else []
+    if isinstance(fulfillments, list) and fulfillments:
+        fulfillment_ids = [str(item["id"]) for item in fulfillments if isinstance(item, dict) and item.get("id")]
+        if fulfillment_ids:
+            args.fulfillment_id = fulfillment_ids[0]
+            args.partial_fulfillment_id = fulfillment_ids[1] if len(fulfillment_ids) > 1 else fulfillment_ids[0]
+        for fulfillment in fulfillments:
+            if not isinstance(fulfillment, dict):
+                continue
+            for stop in fulfillment.get("stops") or []:
+                authorization = stop.get("authorization") if isinstance(stop, dict) else None
+                status = authorization.get("status") if isinstance(authorization, dict) else None
+                if status in {"CLAIMED", "UNCLAIMED"}:
+                    args.issue_fulfillment_state = status
+                    break
+            if getattr(args, "issue_fulfillment_state", None):
+                break
 
     providers = catalog.get("bpp_providers", []) if isinstance(catalog, dict) else []
     if isinstance(providers, list) and providers and isinstance(providers[0], dict):
@@ -194,7 +226,7 @@ def learn_identifiers_from_flow_state(args: argparse.Namespace, client: httpx.Cl
 
     payload_ids: list[str] = []
     for step in flow_state.get("sequence") or []:
-        if step.get("owner") != "BPP" or step.get("status") != "COMPLETE":
+        if step.get("status") != "COMPLETE":
             continue
         payloads = (step.get("payloads") or {}).get("payloads") or []
         for item in payloads:
@@ -273,7 +305,7 @@ def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], 
         else:
             args.issue_action = "OPEN"
 
-        comp_actions = []
+        comp_actions = list(getattr(args, "past_complainant_actions", []) or [])
         resp_actions = []
         if flow_state:
             for s in flow_state.get("sequence", []):
@@ -320,17 +352,19 @@ def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], 
         else:
             args.cancel_code = "SOFT_CANCEL"
         args.cancel_name = "Ride Cancellation"
-        args.reason_id = "000" if "tech" in action_id_lower else "7"
+        args.reason_id = "000" if "tech" in action_id_lower else "001"
     if action == "status" and "tech_cancel" in action_id.lower():
         args.status_ref_id = args.transaction_id
     if action == "update" and ("partial_cancellation" in flow_id_lower or "partial_cancellation" in action_id.lower()):
         args.partial_cancellation = True
-        args.fulfillment_id = "F2"
+        args.fulfillment_id = getattr(args, "partial_fulfillment_id", None) or args.fulfillment_id or "F2"
         args.reason_id = "001"
         if action_id.endswith("202") or action_id.endswith("_2"):
             args.cancel_code = "CONFIRM_CANCEL"
         else:
             args.cancel_code = "SOFT_CANCEL"
+    if "partial_cancellation" in flow_id_lower and action in {"select", "init", "confirm"}:
+        args.passenger_count = max(int(args.passenger_count), 2)
     _apply_ticket_selection(args, action, flow_state)
     return args
 
@@ -419,7 +453,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amount", default="60")
     parser.add_argument("--payment-txn-id", default=None)
     parser.add_argument("--order-id", default="077b248f")
-    parser.add_argument("--reason-id", default="0")
+    parser.add_argument("--reason-id", default="001")
     parser.add_argument("--cancel-code", default="SOFT_CANCEL")
     parser.add_argument("--cancel-name", default="Ride Cancellation")
     parser.add_argument("--update-target", default="order.fulfillments")
@@ -429,8 +463,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--static-terms-url", default="https://ondc.metrosafar.in/terms")
     parser.add_argument("--issue-id", default=None)
     parser.add_argument("--issue-status", default="OPEN")
-    parser.add_argument("--issue-category", default="FULFILMENT")
-    parser.add_argument("--issue-sub-category", default="FLM01")
+    parser.add_argument("--issue-category", default="FULFILLMENT")
+    parser.add_argument("--issue-sub-category", default="FLM101")
     parser.add_argument("--issue-type", default="ISSUE")
     parser.add_argument("--issue-action", default=None)
     parser.add_argument("--issue-short-desc", default="Ticket journey support")
@@ -439,7 +473,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--issue-expected-response-time", default="PT2H")
     parser.add_argument("--issue-expected-resolution-time", default="P1D")
     parser.add_argument("--issue-created-at", default=None)
-    parser.add_argument("--rating", default="THUMBS_UP")
+    parser.add_argument("--rating", default="THUMBS-UP")
     parser.set_defaults(include_bpp_in_search=True)
 
     args = parser.parse_args()

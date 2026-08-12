@@ -17,6 +17,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,24 @@ from nacl.signing import SigningKey
 
 DEFAULT_KEY_FILE = Path.home() / ".metrosafar" / "ondc" / "preprod" / "keys.json"
 DEFAULT_WORKBENCH_BASE = "https://workbench.ondc.tech/api-service/ONDC:TRV11/2.0.0/seller"
+BUYER_FINDER_FEES_PERCENTAGE = Decimal("1")
 
 
 def now_iso() -> str:
     now = datetime.now(timezone.utc)
     return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def settlement_amount(amount: str | None) -> str | None:
+    if not amount:
+        return None
+    try:
+        gross = Decimal(str(amount))
+    except Exception:
+        return str(amount)
+    fee = (gross * BUYER_FINDER_FEES_PERCENTAGE / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    net = (gross - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(net, ".2f")
 
 
 def payment_tags(static_terms_url: str, amount: str | None = None, *, search: bool = False) -> list[dict[str, Any]]:
@@ -47,8 +61,9 @@ def payment_tags(static_terms_url: str, amount: str | None = None, *, search: bo
             {"descriptor": {"code": "COURT_JURISDICTION"}, "value": "New Delhi"},
             *settlement_terms,
         ]
-    if amount and not search:
-        settlement_terms.insert(0, {"descriptor": {"code": "SETTLEMENT_AMOUNT"}, "value": amount})
+    net_settlement_amount = settlement_amount(amount)
+    if net_settlement_amount and not search:
+        settlement_terms.insert(0, {"descriptor": {"code": "SETTLEMENT_AMOUNT"}, "value": net_settlement_amount})
 
     return [
         {
@@ -207,7 +222,7 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
                 "billing": billing(args),
                 "payments": [
                     {
-                        "id": "PA1",
+                        "id": getattr(args, "payment_id", None) or "PA1",
                         "collected_by": "BAP",
                         "status": "PAID",
                         "type": "PRE-ORDER",
@@ -331,23 +346,47 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
         issue_action = args.issue_action or (
             "CLOSE" if args.issue_status.upper() == "CLOSED" else "OPEN"
         )
-        action_desc = args.issue_resolution if issue_action == "CLOSE" else args.issue_short_desc
+        action_desc = "Complaint closed" if issue_action == "CLOSE" else args.issue_short_desc
 
         new_comp_act = complainant_action(args, issue_action, action_desc)
         comp_actions = list(getattr(args, "past_complainant_actions", []) or [])
         if not any(ca.get("complainant_action") == issue_action for ca in comp_actions):
             comp_actions.append(new_comp_act)
 
+        issue_actions = {"complainant_actions": comp_actions}
         resp_actions = list(getattr(args, "past_respondent_actions", []) or [])
-        issue_actions = {
-            "complainant_actions": comp_actions,
-            "respondent_actions": resp_actions,
-        }
+        if resp_actions:
+            issue_actions["respondent_actions"] = resp_actions
         created_at = args.issue_created_at or now_iso()
+        if args.issue_status.upper() == "CLOSED":
+            return {
+                "issue": {
+                    "id": args.issue_id,
+                    "status": "CLOSED",
+                    "issue_actions": issue_actions,
+                    "rating": args.rating,
+                    "created_at": created_at,
+                    "updated_at": now_iso(),
+                }
+            }
+
+        description = {
+            "short_desc": args.issue_short_desc,
+            "long_desc": args.issue_long_desc,
+        }
+        additional_desc = getattr(args, "issue_additional_desc", None)
+        if additional_desc:
+            description["additional_desc"] = additional_desc
+        images = list(getattr(args, "issue_images", []) or [])
+        if images:
+            description["images"] = images
+
         issue: dict[str, Any] = {
             "id": args.issue_id,
             "category": args.issue_category,
+            "sub_category": args.issue_sub_category,
             "status": args.issue_status,
+            "issue_type": args.issue_type,
             "created_at": created_at,
             "updated_at": now_iso(),
             "complainant_info": {
@@ -357,12 +396,7 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
                     "email": args.passenger_email,
                 },
             },
-            "description": {
-                "short_desc": args.issue_short_desc,
-                "long_desc": args.issue_long_desc,
-                "additional_desc": {"url": ""},
-                "images": [],
-            },
+            "description": description,
             "order_details": {
                 "id": args.order_id,
                 "state": "COMPLETED",
@@ -376,7 +410,7 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
                 "fulfillments": [
                     {
                         "id": args.fulfillment_id,
-                        "state": "COMPLETED",
+                        "state": getattr(args, "issue_fulfillment_state", None) or "UNCLAIMED",
                     }
                 ],
             },
@@ -392,15 +426,6 @@ def build_message(args: argparse.Namespace, action: str) -> dict[str, Any]:
             },
             "issue_actions": issue_actions,
         }
-        if "1.0.0" not in getattr(args, "flow_id", "") and str(args.version) != "1.0.0":
-            issue["sub_category"] = args.issue_sub_category
-            issue["issue_type"] = args.issue_type
-
-        if args.issue_status.upper() == "CLOSED":
-            issue["rating"] = args.rating
-            issue["resolution"] = {
-                "short_desc": args.issue_resolution,
-            }
         return {"issue": issue}
     raise ValueError(f"Unsupported action: {action}")
 
@@ -445,7 +470,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amount", default="60")
     parser.add_argument("--payment-txn-id", default=None)
     parser.add_argument("--order-id", default="077b248f")
-    parser.add_argument("--reason-id", default="0")
+    parser.add_argument("--reason-id", default="001")
     parser.add_argument("--cancel-code", default="SOFT_CANCEL")
     parser.add_argument("--cancel-name", default="Ride Cancellation")
     parser.add_argument("--update-target", default="order.fulfillments")
@@ -456,8 +481,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--static-terms-url", default="https://ondc.metrosafar.in/terms")
     parser.add_argument("--issue-id", default=None)
     parser.add_argument("--issue-status", default="OPEN")
-    parser.add_argument("--issue-category", default="FULFILMENT")
-    parser.add_argument("--issue-sub-category", default="FLM01")
+    parser.add_argument("--issue-category", default="FULFILLMENT")
+    parser.add_argument("--issue-sub-category", default="FLM101")
     parser.add_argument("--issue-type", default="ISSUE")
     parser.add_argument("--issue-action", default=None)
     parser.add_argument("--issue-short-desc", default="Ticket journey support")
@@ -466,7 +491,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--issue-expected-response-time", default="PT2H")
     parser.add_argument("--issue-expected-resolution-time", default="P1D")
     parser.add_argument("--issue-created-at", default=None)
-    parser.add_argument("--rating", default="THUMBS_UP")
+    parser.add_argument("--rating", default="THUMBS-UP")
     parser.add_argument("--print-only", action="store_true")
     args = parser.parse_args()
     if args.issue_id is None:
