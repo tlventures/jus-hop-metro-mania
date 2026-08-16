@@ -121,7 +121,13 @@ def flow_names(session: dict[str, Any], requested: list[str]) -> list[str]:
     return sorted(names)
 
 
-def complete(flow_state: dict[str, Any]) -> bool:
+def expected_error_action_ids(flow_id: str) -> set[str]:
+    if "TECHNICAL_CANCELLATION_FLOW" in flow_id:
+        return {"on_confirm_delayed_METRO_200"}
+    return set()
+
+
+def complete(flow_state: dict[str, Any], flow_id: str) -> bool:
     sequence = flow_state.get("sequence") or []
     if not sequence:
         return False
@@ -130,21 +136,32 @@ def complete(flow_state: dict[str, Any]) -> bool:
     if not bap_steps or not all(s.get("status") == "COMPLETE" for s in bap_steps):
         return False
 
-    if any((s.get("payloads") or {}).get("subStatus") == "ERROR" for s in sequence):
+    expected_errors = expected_error_action_ids(flow_id)
+    if any(
+        (s.get("payloads") or {}).get("subStatus") == "ERROR"
+        and s.get("actionId") not in expected_errors
+        for s in sequence
+    ):
         return False
 
     if flow_state.get("extraSteps"):
         return False
 
     non_bap_steps = [s for s in sequence if s.get("owner") != "BAP"]
-    return all(s.get("status") in {"COMPLETE", "SUCCESS"} for s in non_bap_steps)
+    return all(
+        s.get("status") in {"COMPLETE", "SUCCESS"}
+        for s in non_bap_steps
+        if s.get("actionId") not in expected_errors
+    )
 
 
-def error_steps(flow_state: dict[str, Any]) -> list[dict[str, Any]]:
+def unexpected_error_steps(flow_state: dict[str, Any], flow_id: str) -> list[dict[str, Any]]:
+    expected_errors = expected_error_action_ids(flow_id)
     return [
         s
         for s in flow_state.get("sequence") or []
         if (s.get("payloads") or {}).get("subStatus") == "ERROR"
+        and s.get("actionId") not in expected_errors
     ]
 
 
@@ -246,7 +263,7 @@ def run_flow(client: httpx.Client, args: argparse.Namespace, flow_id: str) -> di
         last_state = flow_state
         driver.learn_identifiers_from_flow_state(base, client, flow_state)
 
-        errors = error_steps(flow_state)
+        errors = unexpected_error_steps(flow_state, flow_id)
         if errors:
             result["error"] = "Flow reported ERROR subStatus"
             result["summary"] = summarize(flow_state)
@@ -268,7 +285,7 @@ def run_flow(client: httpx.Client, args: argparse.Namespace, flow_id: str) -> di
             time.sleep(args.poll_delay)
             continue
 
-        if complete(flow_state):
+        if complete(flow_state, flow_id):
             result["ok"] = True
             result["summary"] = summarize(flow_state)
             return result
