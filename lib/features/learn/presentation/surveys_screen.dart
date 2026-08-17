@@ -247,19 +247,38 @@ class _SurveyDialog extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.s6),
             ...survey.options.map((rawOption) {
-              final option = rawOption as String;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                child: GestureDetector(
-                  onTap: () {
-                    ref.read(surveysProvider.notifier).submitSurvey(survey.id, option);
+                  final option = rawOption as String;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: GestureDetector(
+                  onTap: () async {
+                    final accepted = await ref
+                        .read(surveysProvider.notifier)
+                        .submitSurvey(survey.id, option);
+                    if (!context.mounted) return;
+                    final messenger = ScaffoldMessenger.of(context);
                     Navigator.pop(context);
-                    _showThankYou(context, survey.points);
+                    if (accepted) {
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Thank you! You earned +${survey.points} points'),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } else {
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Open Ride Mode to earn survey points.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.s4),
-                    decoration: BoxDecoration(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.s4),
+                        decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
                       borderRadius: AppRadius.borderRadiusM,
                       border: Border.all(
@@ -290,13 +309,4 @@ class _SurveyDialog extends ConsumerWidget {
     );
   }
 
-  void _showThankYou(BuildContext context, int points) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Thank you! You earned +$points points'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 }

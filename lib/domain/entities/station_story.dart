@@ -11,7 +11,10 @@ class StationStory with _$StationStory {
     required String description,
     required String imageUrl,
     required List<StoryFrame> frames,
-    required int points,
+    // Display-only; server awards a fixed `story_completed` reward (25). Default
+    // so stories without an explicit points field still parse (was `required`,
+    // which threw on the real payload and left the screen blank).
+    @Default(25) int points,
     @Default(false) bool isCompleted,
   }) = _StationStory;
 

@@ -6,7 +6,8 @@
 # never silently ship the wrong backend or AdMob units. Required env vars (fail
 # fast if any are missing):
 #
-#   METROSAFAR_API_BASE_URL        Production backend base URL
+#   METROSAFAR_API_BASE_URL        App backend base URL (home, rewards, etc.)
+#   METROSAFAR_ONDC_BASE_URL       ONDC/Beckn backend base URL (ticket booking)
 #   ADMOB_APP_ID                   Real AdMob application id (passed to Gradle)
 #   ADMOB_ANDROID_BANNER_UNIT_ID   Real banner ad unit id
 #   ADMOB_ANDROID_REWARDED_UNIT_ID Real rewarded ad unit id
@@ -29,6 +30,7 @@ require() {
 }
 
 require METROSAFAR_API_BASE_URL
+require METROSAFAR_ONDC_BASE_URL
 require ADMOB_APP_ID
 require ADMOB_ANDROID_BANNER_UNIT_ID
 require ADMOB_ANDROID_REWARDED_UNIT_ID
@@ -37,6 +39,7 @@ MAPS_KEY="${METROSAFAR_MAPS_API_KEY:-}"
 
 DEFINES=(
   --dart-define=METROSAFAR_API_BASE_URL="$METROSAFAR_API_BASE_URL"
+  --dart-define=METROSAFAR_ONDC_BASE_URL="$METROSAFAR_ONDC_BASE_URL"
   --dart-define=ADMOB_ANDROID_BANNER_UNIT_ID="$ADMOB_ANDROID_BANNER_UNIT_ID"
   --dart-define=ADMOB_ANDROID_REWARDED_UNIT_ID="$ADMOB_ANDROID_REWARDED_UNIT_ID"
   --dart-define=METROSAFAR_MAPS_API_KEY="$MAPS_KEY"

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../design_system/components/ad_banner.dart';
@@ -17,7 +18,8 @@ import '../features/play/games/sudoku_screen.dart';
 import '../features/play/games/word_puzzle_screen.dart';
 import '../features/play/games/city_explorer_screen.dart';
 import '../features/learn/presentation/learn_hub_screen.dart';
-import '../features/booking/presentation/booking_coming_soon_screen.dart';
+import '../features/booking/presentation/booking_screen.dart';
+import '../features/booking/presentation/ticket_details_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/audio/presentation/audio_stories_screen.dart';
@@ -28,6 +30,7 @@ import '../features/referral/presentation/referral_screen.dart';
 import '../features/social/presentation/friends_screen.dart';
 import '../features/stamps/presentation/stamps_screen.dart';
 import '../features/trip/presentation/trip_mode_screen.dart';
+import '../features/wallet/presentation/promo_redeem_screen.dart';
 
 const _kOnboardingKey = 'hasCompletedOnboarding';
 
@@ -108,7 +111,14 @@ final GoRouter appRouter = GoRouter(
       routes: [
         GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
         GoRoute(
+          // Bottom-nav "Book" tab. Points at the booking flow now; the older
+          // TripModeScreen (live commute tracking) is still available at
+          // /commute for when the pivot to booking-first is complete.
           path: '/ride',
+          builder: (context, state) => const BookingScreen(),
+        ),
+        GoRoute(
+          path: '/commute',
           builder: (context, state) => const TripModeScreen(),
         ),
         GoRoute(
@@ -127,11 +137,16 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/learn',
-      builder: (context, state) => const LearnHubScreen(),
+      builder: (context, state) =>
+          LearnHubScreen(initialSection: state.uri.queryParameters['section']),
     ),
     GoRoute(
       path: '/my-redemptions',
       builder: (context, state) => const MyRedemptionsScreen(),
+    ),
+    GoRoute(
+      path: '/wallet/redeem',
+      builder: (context, state) => const PromoRedeemScreen(),
     ),
     GoRoute(
       path: '/notifications-inbox',
@@ -147,8 +162,17 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => gameScreenFor(state.pathParameters['gameId'] ?? 'daily_spin'),
     ),
     GoRoute(
+      // Single-screen booking: pick stations, ticket, passengers and pay here.
+      // The old three-step flow (StationSearch → RouteSelection → Checkout) is
+      // folded into BookingScreen. The confirmed-ticket detail screen remains.
       path: '/booking',
-      builder: (context, state) => const BookingComingSoonScreen(),
+      builder: (context, state) => const BookingScreen(),
+      routes: [
+        GoRoute(
+          path: 'ticket',
+          builder: (context, state) => const TicketDetailsScreen(),
+        ),
+      ],
     ),
     GoRoute(
       path: '/friends',
@@ -206,15 +230,57 @@ int _getSelectedIndex(String location) {
   return 0;
 }
 
-class _NavShell extends StatelessWidget {
+class _NavShell extends StatefulWidget {
   final Widget child;
   final int selectedIndex;
 
   const _NavShell({required this.child, required this.selectedIndex});
 
   @override
+  State<_NavShell> createState() => _NavShellState();
+}
+
+class _NavShellState extends State<_NavShell> {
+  DateTime? _lastBackPress;
+
+  /// Global back policy for the bottom-nav tabs (the shell has no inner stack,
+  /// so a raw back would otherwise exit the app from any tab):
+  ///   • If a detail route is pushed above the shell (e.g. /learn, /game/*) →
+  ///     return false so go_router pops it normally.
+  ///   • On a non-Home tab → return to Home.
+  ///   • On Home → require a second back within 2s to actually exit.
+  Future<bool> _onBack() async {
+    if (appRouter.canPop()) return false; // let go_router pop the pushed route
+
+    if (widget.selectedIndex != 0) {
+      appRouter.go('/home');
+      return true;
+    }
+    final now = DateTime.now();
+    if (_lastBackPress == null ||
+        now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+      _lastBackPress = now;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Press back again to exit'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return true;
+    }
+    await SystemNavigator.pop();
+    return true;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final selectedIndex = widget.selectedIndex;
+    final child = widget.child;
+    return BackButtonListener(
+      onBackButtonPressed: _onBack,
+      child: Scaffold(
       body: Column(children: [const OfflineBanner(), Expanded(child: child)]),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -225,20 +291,19 @@ class _NavShell extends StatelessWidget {
           Builder(
             builder: (context) {
               final scheme = Theme.of(context).colorScheme;
+              // Slim ad strip: a hairline divider + small symmetric clearance.
+              // Enough separation from nav targets to avoid accidental taps,
+              // but far tighter than the old ~56px of chrome.
               return Container(
                 width: double.infinity,
                 color: scheme.surface,
-                // 24px top gap (was 8) + 24px bottom gap (was 16).
-                // Keeps the ad ≥24px away from any interactive nav target,
-                // satisfying AdMob placement policy and reducing accidental taps.
-                padding: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
-                    const SizedBox(height: 24),
+                    Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+                    const SizedBox(height: 6),
                     const MetroSafarAdBanner(),
-                    const SizedBox(height: 8), // clearance below the ad unit itself
                   ],
                 ),
               );
@@ -247,42 +312,45 @@ class _NavShell extends StatelessWidget {
           NavigationBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => _navigateToTab(context, index),
-            // Tooltips double as the accessibility (TalkBack) announcement for
-            // each destination; an empty string suppressed it.
+            // Empty tooltip suppresses the floating pill overlay that
+            // Material 3 renders on some devices (was reported as a
+            // showstopper visual bug). TalkBack still announces the
+            // label text, so accessibility is preserved.
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home),
                 label: 'Home',
-                tooltip: 'Home',
+                tooltip: '',
               ),
               NavigationDestination(
-                icon: Icon(Icons.train_outlined),
-                selectedIcon: Icon(Icons.train),
-                label: 'Ride',
-                tooltip: 'Ride mode',
+                icon: Icon(Icons.confirmation_number_outlined),
+                selectedIcon: Icon(Icons.confirmation_number),
+                label: 'Book',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.sports_esports_outlined),
                 selectedIcon: Icon(Icons.sports_esports),
                 label: 'Play',
-                tooltip: 'Play games',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.wallet_outlined),
                 selectedIcon: Icon(Icons.wallet),
                 label: 'Wallet',
-                tooltip: 'Wallet and rewards',
+                tooltip: '',
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
                 label: 'Profile',
-                tooltip: 'Profile',
+                tooltip: '',
               ),
             ],
           ),
         ],
+      ),
       ),
     );
   }

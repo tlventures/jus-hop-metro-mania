@@ -91,8 +91,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
   void hydrateFromHomeData(Map<String, dynamic> walletData) {
     if (_disposed) return;
     final points = (walletData['points'] as num?)?.toInt() ?? state.points;
-    final tier = walletData['membershipTier'] as String? ?? state.tier;
-    final (progress, ptsToNext, nextTier) = _computeTier(points, tier);
+    final (tier, progress, ptsToNext, nextTier) = _computeTier(points);
     state = state.copyWith(
       points: points,
       tier: tier,
@@ -109,8 +108,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
       if (_disposed) return;
       final profile = data['profile'] as Map<String, dynamic>? ?? data;
       final points = (profile['points'] as num?)?.toInt() ?? 0;
-      final tier = profile['membershipTier'] as String? ?? 'Bronze';
-      final (progress, ptsToNext, nextTier) = _computeTier(points, tier);
+      final (tier, progress, ptsToNext, nextTier) = _computeTier(points);
 
       state = state.copyWith(
         points: points,
@@ -150,9 +148,10 @@ class WalletNotifier extends StateNotifier<WalletState> {
       // Trust the server's returned balance instead of local subtraction.
       final serverPoints = (result['points'] as num?)?.toInt();
       final newPoints = serverPoints ?? (state.points - cost);
-      final (progress, ptsToNext, nextTier) = _computeTier(newPoints, state.tier);
+      final (tier, progress, ptsToNext, nextTier) = _computeTier(newPoints);
       state = state.copyWith(
         points: newPoints,
+        tier: tier,
         tierProgress: progress,
         pointsToNextTier: ptsToNext,
         nextTier: nextTier,
@@ -168,9 +167,10 @@ class WalletNotifier extends StateNotifier<WalletState> {
   void applyPointsAwarded(int pts) {
     if (pts <= 0) return;
     final newPoints = state.points + pts;
-    final (progress, ptsToNext, nextTier) = _computeTier(newPoints, state.tier);
+    final (tier, progress, ptsToNext, nextTier) = _computeTier(newPoints);
     state = state.copyWith(
       points: newPoints,
+      tier: tier,
       tierProgress: progress,
       pointsToNextTier: ptsToNext,
       nextTier: nextTier,
@@ -194,10 +194,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
     final dailyCap = (result['dailyCap'] as num?)?.toInt();
 
     if (serverTotal != null) {
-      final (progress, ptsToNext, nextTier) =
-          _computeTier(serverTotal, state.tier);
+      final (tier, progress, ptsToNext, nextTier) =
+          _computeTier(serverTotal);
       state = state.copyWith(
         points: serverTotal,
+        tier: tier,
         tierProgress: progress,
         pointsToNextTier: ptsToNext,
         nextTier: nextTier,
@@ -222,15 +223,20 @@ class WalletNotifier extends StateNotifier<WalletState> {
 
   // Must match server.js getTier() / getNextTier() thresholds:
   // Bronze (0-299) → Silver (300-599) → Gold (600-999) → Platinum (1000+)
-  static (double, int, String) _computeTier(int points, String currentTier) {
-    if (points < 300) {
-      return ((points / 300.0).clamp(0.0, 1.0), 300 - points, 'Silver');
-    } else if (points < 600) {
-      return (((points - 300) / 300.0).clamp(0.0, 1.0), 600 - points, 'Gold');
-    } else if (points < 1000) {
-      return (((points - 600) / 400.0).clamp(0.0, 1.0), 1000 - points, 'Platinum');
+  //
+  // Returns (computedTier, progress, pointsToNext, nextTierName) so the
+  // tier name is ALWAYS derived from points, avoiding the "Silver badge +
+  // 345 pts to Silver" contradiction that occurs when the server-returned
+  // membershipTier string is stale.
+  static (String, double, int, String) _computeTier(int points) {
+    if (points >= 1000) {
+      return ('Platinum', 1.0, 0, 'Platinum');
+    } else if (points >= 600) {
+      return ('Gold', ((points - 600) / 400.0).clamp(0.0, 1.0), 1000 - points, 'Platinum');
+    } else if (points >= 300) {
+      return ('Silver', ((points - 300) / 300.0).clamp(0.0, 1.0), 600 - points, 'Gold');
     } else {
-      return (1.0, 0, 'Platinum');
+      return ('Bronze', (points / 300.0).clamp(0.0, 1.0), 300 - points, 'Silver');
     }
   }
 }

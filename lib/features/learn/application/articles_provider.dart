@@ -12,9 +12,10 @@ class ArticlesNotifier extends StateNotifier<List<Article>> {
     try {
       final data = await _backendService.getArticles();
       if (!mounted) return;
-      final articles = (data['articles'] as List<dynamic>? ?? [])
-          .map((a) => Article.fromJson(Map<String, dynamic>.from(a as Map)))
-          .toList();
+      final articles =
+          (data['articles'] as List<dynamic>? ?? [])
+              .map((a) => Article.fromJson(Map<String, dynamic>.from(a as Map)))
+              .toList();
       state = articles;
     } catch (e) {
       debugPrint('ArticlesNotifier.fetchArticles error: $e');
@@ -22,33 +23,41 @@ class ArticlesNotifier extends StateNotifier<List<Article>> {
     }
   }
 
-  Future<void> markArticleRead(String articleId) async {
+  Future<bool> markArticleRead(String articleId) async {
     try {
       await _backendService.markArticleRead(articleId);
-      try { await _backendService.completeQuest('read_article'); } catch (_) {}
+      try {
+        await _backendService.completeQuest('read_article');
+      } catch (_) {}
     } catch (e) {
       debugPrint('ArticlesNotifier.markArticleRead error: $e');
+      return false;
     }
 
-    if (!mounted) return;
-    state = state.map((article) {
-      if (article.id == articleId) {
-        return article.copyWith(isRead: true);
-      }
-      return article;
-    }).toList();
+    if (!mounted) return false;
+    state =
+        state.map((article) {
+          if (article.id == articleId) {
+            return article.copyWith(isRead: true);
+          }
+          return article;
+        }).toList();
+    return true;
   }
 
   int get readCount => state.where((a) => a.isRead).length;
-  int get totalPoints => state.fold(0, (sum, a) => sum + (a.isRead ? a.points : 0));
+  int get totalPoints =>
+      state.fold(0, (sum, a) => sum + (a.isRead ? a.points : 0));
 }
 
 final backendServiceArticlesProvider = Provider((ref) => BackendService());
 
-final articlesProvider = StateNotifierProvider<ArticlesNotifier, List<Article>>((ref) {
-  final backendService = ref.watch(backendServiceArticlesProvider);
-  return ArticlesNotifier(backendService);
-});
+final articlesProvider = StateNotifierProvider<ArticlesNotifier, List<Article>>(
+  (ref) {
+    final backendService = ref.watch(backendServiceArticlesProvider);
+    return ArticlesNotifier(backendService);
+  },
+);
 
 final readArticlesProvider = Provider<int>((ref) {
   final articles = ref.watch(articlesProvider);

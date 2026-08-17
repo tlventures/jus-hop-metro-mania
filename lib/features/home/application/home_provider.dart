@@ -73,7 +73,15 @@ class HomeNotifier extends StateNotifier<AsyncValue<HomeData>> {
     if (_disposed) return;
     state = const AsyncValue.loading();
     try {
-      final raw = await _backendService.getHomeData();
+      Map<String, dynamic> raw;
+      try {
+        raw = await _backendService.getHomeData();
+      } catch (e) {
+        // /api/home is not deployed yet — degrade to an empty aggregate so
+        // the app opens on a booking-first landing instead of an Error page.
+        debugPrint('HomeNotifier: /api/home unavailable, using empty home ($e)');
+        raw = const {};
+      }
       if (_disposed) return;
 
       final home = HomeData.fromJson(raw);

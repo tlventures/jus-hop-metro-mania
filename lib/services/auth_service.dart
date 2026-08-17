@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -32,6 +33,13 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userKeys = prefs.getKeys().where(
+      (key) => key.startsWith('cache_') || key == 'phase56_outbox',
+    );
+    for (final key in userKeys.toList()) {
+      await prefs.remove(key);
+    }
     await _auth.signOut();
     debugPrint('AuthService: signed out');
   }

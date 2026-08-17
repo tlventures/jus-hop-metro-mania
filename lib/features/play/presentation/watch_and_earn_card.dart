@@ -7,7 +7,8 @@ import '../../../design_system/tokens/radius.dart';
 import '../../../design_system/tokens/spacing.dart';
 import '../../../design_system/tokens/typography.dart';
 import '../../../services/admob_config.dart';
-import '../../home/application/home_provider.dart';
+import '../../wallet/application/promo_provider.dart';
+import '../../wallet/data/rewards_service.dart';
 
 /// "Watch a video, earn points" — shows a rewarded ad and credits points
 /// (server-enforced daily cap) when the user finishes watching.
@@ -92,28 +93,45 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
     // server-side callback (GET /api/rewards/admob-ssv?user_id=...).
     // Points are awarded server-side; the client just shows a confirmation.
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    await ad.setServerSideOptions(ServerSideVerificationOptions(
-      userId: uid,
-      customData: 'metrosafar_reward_v1',
-    ));
+    await ad.setServerSideOptions(
+      ServerSideVerificationOptions(
+        userId: uid,
+        customData: 'metrosafar_reward_v1',
+      ),
+    );
     await ad.show(
       onUserEarnedReward: (_, reward) async {
-        // SSV is the primary award path (Google calls our backend directly).
-        // The legacy POST /api/rewards/watch-ad acts as a fallback while SSV
-        // is being verified in production.
         if (!mounted) return;
-        // Refresh wallet after a brief delay to pick up the SSV-credited points.
-        Future.delayed(const Duration(seconds: 3), () {
+        // Credit via our unified earn endpoint. AdMob SSV is stronger for
+        // production; this is the client-declared path until SSV is verified
+        // in prod. Idempotency-Key uses the user+ad+timestamp so replay is
+        // rejected by the backend.
+        final eventId = 'ad:$uid:${DateTime.now().millisecondsSinceEpoch}';
+        try {
+          final res = await RewardsService().earn(
+            source: 'AD_WATCH',
+            eventId: eventId,
+          );
+          ref.invalidate(walletBalanceProvider);
           if (mounted) {
-            ref.read(homeProvider.notifier).fetch();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  res.pointsAwarded > 0
+                      ? 'Earned ${res.pointsAwarded} pts · ${res.dayCapRemainingSource} more today'
+                      : 'Daily ad cap reached — come back tomorrow',
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎉 +15 pts on the way!'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not credit reward: $e')),
+            );
+          }
+        }
       },
     );
   }
@@ -136,7 +154,9 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
             ],
           ),
           borderRadius: AppRadius.borderRadiusXL,
-          border: Border.all(color: AppColors.goldPoints.withValues(alpha: 0.35)),
+          border: Border.all(
+            color: AppColors.goldPoints.withValues(alpha: 0.35),
+          ),
         ),
         child: Row(
           children: [
@@ -146,30 +166,39 @@ class _WatchAndEarnCardState extends ConsumerState<WatchAndEarnCard> {
                 color: AppColors.goldPoints.withValues(alpha: 0.2),
                 borderRadius: AppRadius.borderRadiusM,
               ),
-              child: const Icon(Icons.play_circle_fill, color: AppColors.goldPoints),
+              child: const Icon(
+                Icons.play_circle_fill,
+                color: AppColors.goldPoints,
+              ),
             ),
             const SizedBox(width: AppSpacing.s4),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Watch & Earn',
-                      style: AppTypography.titleSmall.copyWith(
-                          color: colorScheme.onSurface, fontWeight: FontWeight.w800)),
+                  Text(
+                    'Watch & Earn',
+                    style: AppTypography.titleSmall.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     ready
-                        ? 'Watch a short video, earn +15 pts'
+                        ? 'Watch a short video, earn +10 pts'
                         : 'Loading a video…',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: colorScheme.onSurfaceVariant),
+                    style: AppTypography.bodySmall.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
             ),
             if (!ready)
               const SizedBox(
-                width: 18, height: 18,
+                width: 18,
+                height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else

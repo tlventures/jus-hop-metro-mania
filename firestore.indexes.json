@@ -47,6 +47,16 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "comment": "getActiveCommuteSession: where(userId==).where(status==).orderBy(updatedAt desc). Also blocks POST /api/reward-attempts, which calls it — so a missing index breaks all earning.",
+      "collectionGroup": "metrosafar_commute_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

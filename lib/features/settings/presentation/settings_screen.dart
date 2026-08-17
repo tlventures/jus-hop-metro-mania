@@ -54,7 +54,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() => _digestEnabled = value);
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
-    final profile = ref.read(profileProvider).value;
+    final profile = ref.read(profileProvider).valueOrNull;
     try {
       await BackendService().updateProfile(
         name: UserDisplayName.name(firebaseUser: firebaseUser, profile: profile),

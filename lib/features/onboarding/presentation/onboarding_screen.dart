@@ -8,7 +8,7 @@ import 'screens/age_gate_screen.dart';
 import 'screens/city_confirm_screen.dart';
 import 'screens/games_feature_screen.dart';
 import 'screens/learn_feature_screen.dart';
-import 'screens/parental_consent_screen.dart';
+import 'screens/age_restricted_screen.dart';
 import 'screens/permissions_screen.dart';
 import 'screens/privacy_consent_screen.dart';
 import 'screens/rewards_feature_screen.dart';
@@ -63,18 +63,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _completeOnboarding();
   }
 
-  /// For under-18 users: show the parental consent screen as a full-screen
-  /// modal route (not a PageView page) to avoid the pre-build race condition.
-  /// Advances to the next onboarding page after the modal is dismissed.
-  void _showParentalConsentModal(BuildContext context) {
+  /// Under-18 users stop here. Shown as a full-screen modal (not a PageView
+  /// page) so it can't be swiped past, and so the age gate remains underneath
+  /// if the user needs to correct a mistyped birthday. There is no "continue" —
+  /// MetroSafar is 18+ and does not process children's data (DPDPA §9).
+  void _showAgeRestrictedModal(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => ParentalConsentScreen(
-          onContinue: () {
-            Navigator.of(context).pop();
-            _nextStep();
-          },
+        builder: (_) => AgeRestrictedScreen(
+          onChangeDob: () => Navigator.of(context).pop(),
         ),
       ),
     );
@@ -105,13 +103,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               onSkip: _skipOnboarding,
             ),
             // Page 1 – Age gate (DPDPA §9)
-            // For adults: onAdult → _nextStep advances the PageView.
-            // For minors: onMinor → shows ParentalConsentScreen as a modal
-            //   (not a PageView page, avoiding PageView pre-build race),
-            //   then advances into the same next page when dismissed.
+            // Adults advance the PageView. Under-18s hit a terminal 18+ screen
+            // as a modal and cannot continue — no guardian data is collected.
             Builder(builder: (ctx) => AgeGateScreen(
               onAdult: _nextStep,
-              onMinor: () => _showParentalConsentModal(ctx),
+              onMinor: () => _showAgeRestrictedModal(ctx),
               onBack: _previousStep,
             )),
             // Page 2 – Play features

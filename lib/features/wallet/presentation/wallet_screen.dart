@@ -65,7 +65,52 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           children: [
                             _WalletBalanceHero(wallet: wallet),
 
-                            const SizedBox(height: AppSpacing.s8),
+                            const SizedBox(height: AppSpacing.s5),
+
+                            // Convert points → promo code entry point.
+                            InkWell(
+                              onTap: () => context.push('/wallet/redeem'),
+                              borderRadius: AppRadius.borderRadiusL,
+                              child: Container(
+                                padding: const EdgeInsets.all(AppSpacing.s4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.10),
+                                  borderRadius: AppRadius.borderRadiusL,
+                                  border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.card_giftcard_rounded,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(width: AppSpacing.s3),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Redeem points for a promo code',
+                                            style: AppTypography.titleMedium.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          Text(
+                                            '10 pts = ₹1 off your next ticket. Codes are valid 30 days.',
+                                            style: AppTypography.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right_rounded),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: AppSpacing.s5),
 
                             // Transaction history preview
                             _TransactionHistorySection(wallet: wallet),
@@ -720,8 +765,71 @@ class _RedeemSection extends ConsumerWidget {
       );
     }
 
-    final cats =
-        rewards.categories.isEmpty ? _fallbackCategories : rewards.categories;
+    final cats = rewards.categories;
+
+    // No rewards loaded — show a compact, styled empty state instead of a
+    // tall blank TabBarView with placeholder categories (the old "giant gray
+    // rectangle" bug).
+    if (cats.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Redeem Rewards',
+                style: AppTypography.titleMedium.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => context.push('/my-redemptions'),
+                icon: const Icon(Icons.receipt_long, size: 18),
+                label: const Text('My Redemptions'),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              vertical: AppSpacing.s8,
+              horizontal: AppSpacing.s6,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainer,
+              borderRadius: AppRadius.borderRadiusXL,
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.redeem_outlined,
+                  size: 40,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                Text(
+                  'Rewards coming soon',
+                  style: AppTypography.titleSmall.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  'Keep earning points — exciting rewards will appear here.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

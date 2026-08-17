@@ -68,3 +68,8 @@ admin/.env.local
 .env
 .env.local
 .env.*.local
+
+# ONDC Python backend — caches, venv, local db (source committed separately)
+ondc-mobility-backend/.venv/
+ondc-mobility-backend/**/__pycache__/
+ondc-mobility-backend/*.db

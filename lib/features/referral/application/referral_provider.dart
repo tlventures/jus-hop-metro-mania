@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/backend_service.dart';
+import '../../wallet/data/rewards_service.dart';
 
 class ReferralState {
   final bool isLoading;
@@ -44,22 +45,22 @@ class ReferralState {
 }
 
 class ReferralNotifier extends StateNotifier<ReferralState> {
+  final RewardsService _rewards;
+  // Kept for API symmetry only; new endpoints go through RewardsService.
+  // ignore: unused_field
   final BackendService _backend;
 
-  ReferralNotifier(this._backend) : super(const ReferralState());
+  ReferralNotifier(this._backend, this._rewards) : super(const ReferralState());
 
   Future<void> load() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final data = await _backend.generateReferralCode();
+      final code = await _rewards.getReferralCode();
       state = state.copyWith(
         isLoading: false,
-        code: data['token'] as String?,
-        link: data['link'] as String?,
-        shareMessage: data['shareMessage'] as String?,
-        usedCount: (data['usedCount'] as num?)?.toInt() ?? state.usedCount,
-        rewardedCount:
-            (data['rewardedCount'] as num?)?.toInt() ?? state.rewardedCount,
+        code: code.code,
+        link: null,
+        shareMessage: code.shareMessage,
       );
     } catch (error) {
       debugPrint('ReferralNotifier.load error: $error');
@@ -70,7 +71,7 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
   Future<bool> apply(String token) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _backend.applyReferralCode(token);
+      await _rewards.applyReferral(token);
       await load();
       return true;
     } catch (error) {
@@ -82,5 +83,5 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
 }
 
 final referralProvider = StateNotifierProvider<ReferralNotifier, ReferralState>(
-  (ref) => ReferralNotifier(BackendService()),
+  (ref) => ReferralNotifier(BackendService(), RewardsService()),
 );

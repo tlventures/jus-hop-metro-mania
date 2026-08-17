@@ -20,7 +20,8 @@ class SudokuScreen extends ConsumerStatefulWidget {
   ConsumerState<SudokuScreen> createState() => _SudokuScreenState();
 }
 
-class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProviderStateMixin {
+class _SudokuScreenState extends ConsumerState<SudokuScreen>
+    with TickerProviderStateMixin {
   late List<List<int>> solution;
   late List<List<int>> board;
   late List<List<bool>> isOriginal;
@@ -146,7 +147,8 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
         isInvalid[selectedRow][selectedCol] = false;
       } else {
         board[selectedRow][selectedCol] = num;
-        isInvalid[selectedRow][selectedCol] = num != solution[selectedRow][selectedCol];
+        isInvalid[selectedRow][selectedCol] =
+            num != solution[selectedRow][selectedCol];
 
         if (isInvalid[selectedRow][selectedCol]) {
           mistakes++;
@@ -178,52 +180,64 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
     }
   }
 
-  void _showGameEnd() {
+  Future<void> _showGameEnd() async {
     final score = 100 - (mistakes * 5).clamp(0, 90);
-    final points = (score > 50 ? 25 : 15);
+    final defaultPoints = (score > 50 ? 25 : 15);
+    final result = await ref
+        .read(gamesProvider.notifier)
+        .updateGameScore('sudoku', score);
+    if (!mounted) return;
+    final accepted = result != null;
+    final points =
+        accepted
+            ? (result['pointsEarned'] as num?)?.toInt() ?? defaultPoints
+            : 0;
 
     setState(() => gameCompleted = true);
-
-    ref.read(gamesProvider.notifier).updateGameScore('sudoku', score);
 
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.borderRadiusXXL,
-      ),
-      builder: (context) => GameEndBottomSheet(
-        title: score > 70 ? '⭐ Excellent!' : '👍 Good Job!',
-        score: score,
-        points: points,
-        message: 'Completed in ${_formatTime(elapsedSeconds)}${mistakes > 0 ? ' with $mistakes mistakes' : ' perfectly!'}',
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() {
-                  mistakes = 0;
-                  elapsedSeconds = 0;
-                  gameCompleted = false;
-                  _initializeGame();
-                });
-              },
-              child: const Text('Play Again'),
-            ),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.borderRadiusXXL),
+      builder:
+          (context) => GameEndBottomSheet(
+            title:
+                accepted
+                    ? (score > 70 ? '⭐ Excellent!' : '👍 Good Job!')
+                    : 'Ride Mode required',
+            score: score,
+            points: points,
+            message:
+                accepted
+                    ? 'Completed in ${_formatTime(elapsedSeconds)}${mistakes > 0 ? ' with $mistakes mistakes' : ' perfectly!'}'
+                    : 'Solve while in transit to claim points.',
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      mistakes = 0;
+                      elapsedSeconds = 0;
+                      gameCompleted = false;
+                      _initializeGame();
+                    });
+                  },
+                  child: const Text('Play Again'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Share Score'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Share Score'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -246,9 +260,9 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final city        = ref.watch(activeCityProvider);
-    final locale      = ref.watch(localeProvider).languageCode;
-    final cityName    = city?.displayName(locale) ?? '';
+    final city = ref.watch(activeCityProvider);
+    final locale = ref.watch(localeProvider).languageCode;
+    final cityName = city?.displayName(locale) ?? '';
 
     // City icon pack (may be null if not yet loaded / no pack uploaded)
     final iconPackAsync = ref.watch(citySudokuIconsProvider);
@@ -258,7 +272,10 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
     final isEmoji = hasIcons;
 
     return GameShell(
-      title: hasIcons ? iconPack!.localizedTitle(locale) : '${cityName.isEmpty ? "" : "$cityName "}Sudoku',
+      title:
+          hasIcons
+              ? iconPack!.localizedTitle(locale)
+              : '${cityName.isEmpty ? "" : "$cityName "}Sudoku',
       subtitle: _difficultyLabel(widget.difficulty),
       onBack: () => Navigator.pop(context),
       elapsedTime: Duration(seconds: elapsedSeconds),
@@ -278,15 +295,19 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
                       vertical: AppSpacing.s2,
                     ),
                     decoration: BoxDecoration(
-                      color: mistakes > 2
-                          ? Color(0xFFEF4444).withValues(alpha: 0.2)
-                          : colorScheme.surfaceContainer,
+                      color:
+                          mistakes > 2
+                              ? Color(0xFFEF4444).withValues(alpha: 0.2)
+                              : colorScheme.surfaceContainer,
                       borderRadius: AppRadius.borderRadiusS,
                     ),
                     child: Text(
                       '❌ $mistakes/3 mistakes',
                       style: AppTypography.labelSmall.copyWith(
-                        color: mistakes > 2 ? Color(0xFFEF4444) : colorScheme.onSurface,
+                        color:
+                            mistakes > 2
+                                ? Color(0xFFEF4444)
+                                : colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -306,38 +327,48 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
                   ),
                   child: GridView.builder(
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 9,
-                      crossAxisSpacing: 2,
-                      mainAxisSpacing: 2,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 9,
+                          crossAxisSpacing: 2,
+                          mainAxisSpacing: 2,
+                        ),
                     itemCount: 81,
                     itemBuilder: (context, index) {
                       final row = index ~/ 9;
                       final col = index % 9;
-                      final isSelected = selectedRow == row && selectedCol == col;
-                      final isInSameRow = selectedRow == row && selectedCol != -1;
-                      final isInSameCol = selectedCol == col && selectedRow != -1;
-                      final isInSameBox = (selectedRow ~/ 3 == row ~/ 3) &&
+                      final isSelected =
+                          selectedRow == row && selectedCol == col;
+                      final isInSameRow =
+                          selectedRow == row && selectedCol != -1;
+                      final isInSameCol =
+                          selectedCol == col && selectedRow != -1;
+                      final isInSameBox =
+                          (selectedRow ~/ 3 == row ~/ 3) &&
                           (selectedCol ~/ 3 == col ~/ 3) &&
                           !(selectedRow == row && selectedCol == col);
 
                       return GestureDetector(
-                        onTap: () => setState(() {
-                          selectedRow = row;
-                          selectedCol = col;
-                        }),
+                        onTap:
+                            () => setState(() {
+                              selectedRow = row;
+                              selectedCol = col;
+                            }),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? colorScheme.primary.withValues(alpha: 0.3)
-                                : isInSameRow || isInSameCol || isInSameBox
+                            color:
+                                isSelected
+                                    ? colorScheme.primary.withValues(alpha: 0.3)
+                                    : isInSameRow || isInSameCol || isInSameBox
                                     ? colorScheme.primary.withValues(alpha: 0.1)
                                     : Colors.transparent,
                             border: Border.all(
-                              color: (row % 3 == 2 || col % 3 == 2)
-                                  ? colorScheme.outlineVariant
-                                  : colorScheme.outline.withValues(alpha: 0.3),
+                              color:
+                                  (row % 3 == 2 || col % 3 == 2)
+                                      ? colorScheme.outlineVariant
+                                      : colorScheme.outline.withValues(
+                                        alpha: 0.3,
+                                      ),
                               width: (row % 3 == 2 || col % 3 == 2) ? 2 : 1,
                             ),
                           ),
@@ -348,15 +379,17 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
                                       ? const TextStyle(fontSize: 22)
                                       : AppTypography.headlineSmall)
                                   .copyWith(
-                                color: isOriginal[row][col]
-                                    ? colorScheme.onSurface
-                                    : isInvalid[row][col]
-                                        ? const Color(0xFFEF4444)
-                                        : colorScheme.primary,
-                                fontWeight: isOriginal[row][col]
-                                    ? FontWeight.w700
-                                    : FontWeight.w600,
-                              ),
+                                    color:
+                                        isOriginal[row][col]
+                                            ? colorScheme.onSurface
+                                            : isInvalid[row][col]
+                                            ? const Color(0xFFEF4444)
+                                            : colorScheme.primary,
+                                    fontWeight:
+                                        isOriginal[row][col]
+                                            ? FontWeight.w700
+                                            : FontWeight.w600,
+                                  ),
                             ),
                           ),
                         ),
@@ -396,9 +429,9 @@ class _SudokuScreenState extends ConsumerState<SudokuScreen> with TickerProvider
                                   ? const TextStyle(fontSize: 20)
                                   : AppTypography.titleSmall)
                               .copyWith(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                     ),

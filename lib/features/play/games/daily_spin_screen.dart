@@ -141,48 +141,62 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
     });
   }
 
-  void _showRewardBottomSheet() {
-    ref.read(gamesProvider.notifier).updateGameScore('daily_spin', pointsEarned);
+  Future<void> _showRewardBottomSheet() async {
+    final result = await ref
+        .read(gamesProvider.notifier)
+        .updateGameScore('daily_spin', pointsEarned);
+    if (!mounted) return;
+    final accepted = result != null;
+    final earnedPoints =
+        accepted
+            ? (result['pointsEarned'] as num?)?.toInt() ?? pointsEarned
+            : 0;
 
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.borderRadiusXXL,
-      ),
-      builder: (context) => GameEndBottomSheet(
-        title: 'Congratulations! 🎉',
-        score: pointsEarned,
-        points: pointsEarned,
-        message: 'Claim your reward and comeback tomorrow for another spin!',
-        icon: Center(
-          child: Text(
-            rewardSegment?.label ?? '🎁',
-            style: const TextStyle(fontSize: 80),
-          ),
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _resetSpin();
-              },
-              child: const Text('Claim & Continue'),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.borderRadiusXXL),
+      builder:
+          (context) => GameEndBottomSheet(
+            title: accepted ? 'Congratulations! 🎉' : 'Ride Mode required',
+            score: pointsEarned,
+            points: earnedPoints,
+            message:
+                accepted
+                    ? 'Claim your reward and comeback tomorrow for another spin!'
+                    : 'Spin while in transit to claim points.',
+            icon: Center(
+              child: Text(
+                rewardSegment?.label ?? '🎁',
+                style: const TextStyle(fontSize: 80),
+              ),
             ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _resetSpin();
+                  },
+                  child: Text(
+                    accepted ? 'Claim & Continue' : 'Try Again Later',
+                  ),
+                ),
+              ),
+              if (accepted) ...[
+                const SizedBox(height: AppSpacing.s3),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _shareReward,
+                    child: const Text('Share'),
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _shareReward,
-              child: const Text('Share'),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -200,7 +214,7 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
       ShareParams(
         text:
             'I just won $label on MetroSafar Daily Spin! 🚇 Try your luck today.\n\n'
-            'Get the app: https://metrosafar.app',
+            'Get the app: https://metrosafar.in',
         subject: 'MetroSafar Daily Spin',
       ),
     );
@@ -277,7 +291,9 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
                           borderRadius: AppRadius.borderRadiusFull,
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.gradientStart.withValues(alpha: 0.3),
+                              color: AppColors.gradientStart.withValues(
+                                alpha: 0.3,
+                              ),
                               blurRadius: 20,
                               spreadRadius: 2,
                             ),
@@ -332,7 +348,9 @@ class _DailySpinScreenState extends ConsumerState<DailySpinScreen>
                 child: Column(
                   children: [
                     Text(
-                      hasSpunToday ? 'Today’s spin used' : 'One free spin per day',
+                      hasSpunToday
+                          ? 'Today’s spin used'
+                          : 'One free spin per day',
                       style: AppTypography.titleSmall.copyWith(
                         color: colorScheme.onSurface,
                       ),
@@ -370,20 +388,18 @@ class SpinWheelPainter extends CustomPainter {
   final List<SpinSegment> segments;
   final int selectedIndex;
 
-  SpinWheelPainter({
-    required this.segments,
-    required this.selectedIndex,
-  });
+  SpinWheelPainter({required this.segments, required this.selectedIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     final paint = Paint()..style = PaintingStyle.fill;
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = Colors.white;
+    final strokePaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = Colors.white;
 
     const segmentAngle = 2 * 3.14159 / 8; // 360/8 segments
 
@@ -450,9 +466,10 @@ class SpinWheelPainter extends CustomPainter {
 class PointerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.gradientStart
-      ..style = PaintingStyle.fill;
+    final paint =
+        Paint()
+          ..color = AppColors.gradientStart
+          ..style = PaintingStyle.fill;
 
     final path = Path();
     path.moveTo(size.width / 2, 0);

@@ -16,7 +16,7 @@ _$StationStoryImpl _$$StationStoryImplFromJson(Map<String, dynamic> json) =>
           (json['frames'] as List<dynamic>)
               .map((e) => StoryFrame.fromJson(e as Map<String, dynamic>))
               .toList(),
-      points: (json['points'] as num).toInt(),
+      points: (json['points'] as num?)?.toInt() ?? 25,
       isCompleted: json['isCompleted'] as bool? ?? false,
     );
 

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:metrosafar/config/api_config.dart';
+import 'package:metrosafar/core/commute/commute_session.dart';
 import 'package:metrosafar/core/commute/ride_verification.dart';
 import 'package:metrosafar/models/metro_station.dart';
 import 'package:metrosafar/services/sync/outbox.dart';
@@ -41,6 +42,15 @@ class _RetryableHttpException implements Exception {
   String toString() => 'Server error ($statusCode)';
 }
 
+class _TerminalHttpException implements Exception {
+  final int statusCode;
+  final String message;
+  const _TerminalHttpException(this.statusCode, this.message);
+
+  @override
+  String toString() => message;
+}
+
 class BackendService {
   final http.Client _client;
 
@@ -51,6 +61,11 @@ class BackendService {
   String _newRequestId() {
     final random = Random.secure().nextInt(1 << 32);
     return 'req_${DateTime.now().microsecondsSinceEpoch}_$random';
+  }
+
+  String _scopedCacheKey(String cacheKey) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+    return '${cacheKey}_$uid';
   }
 
   Future<Map<String, String>> _headers({String? idempotencyKey}) async {
@@ -95,16 +110,13 @@ class BackendService {
 
   /// Award points after a rewarded ad completes (server enforces the daily cap).
   Future<Map<String, dynamic>> claimAdReward() {
-    return _sendJson('POST', '/api/rewards/watch-ad', cacheKey: 'cache_ad_reward');
-  }
-
-  /// DPDPA §9: request a parental consent verification email for a minor.
-  Future<Map<String, dynamic>> requestParentalConsent({
-    required String parentEmail,
-  }) {
-    return _sendJson('POST', '/api/auth/parental-consent-request', body: {
-      'parentEmail': parentEmail,
-    });
+    return _sendRewardJson(
+      'POST',
+      '/api/rewards/watch-ad',
+      activityType: 'video',
+      entityId: 'rewarded_ad',
+      cacheKey: 'cache_ad_reward',
+    );
   }
 
   /// DPDPA: record consent decision to the append-only server-side audit log.
@@ -116,12 +128,16 @@ class BackendService {
     required String platform,
   }) async {
     try {
-      await _sendJson('POST', '/api/me/consent', body: {
-        'analyticsConsent': analyticsConsent,
-        'marketingConsent': marketingConsent,
-        'appVersion': appVersion,
-        'platform': platform,
-      });
+      await _sendJson(
+        'POST',
+        '/api/me/consent',
+        body: {
+          'analyticsConsent': analyticsConsent,
+          'marketingConsent': marketingConsent,
+          'appVersion': appVersion,
+          'platform': platform,
+        },
+      );
     } catch (e) {
       debugPrint('BackendService.recordConsent: $e (non-fatal)');
     }
@@ -175,9 +191,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> watchVideo(String videoId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/rewards/watch/$videoId',
+      activityType: 'video',
+      entityId: videoId,
       cacheKey: 'cache_rewards',
     );
   }
@@ -218,9 +236,11 @@ class BackendService {
     int? questionsAnswered,
     int? streak,
   }) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/games/$gameId/complete',
+      activityType: 'game',
+      entityId: gameId,
       cacheKey: 'cache_games',
       body: {
         'score': score,
@@ -275,13 +295,21 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> claimStreakBonus() {
-    return _sendJson('POST', '/api/streak/claim', cacheKey: 'cache_home');
+    return _sendRewardJson(
+      'POST',
+      '/api/streak/claim',
+      activityType: 'streak',
+      entityId: 'daily',
+      cacheKey: 'cache_home',
+    );
   }
 
   Future<Map<String, dynamic>> completeQuest(String questId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/quests/$questId/complete',
+      activityType: 'quest',
+      entityId: questId,
       cacheKey: 'cache_home',
     );
   }
@@ -294,9 +322,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> scratchCard(String cardId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/scratch-cards/$cardId/scratch',
+      activityType: 'scratch',
+      entityId: cardId,
       cacheKey: 'cache_games',
     );
   }
@@ -306,9 +336,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> markArticleRead(String articleId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/articles/$articleId/read',
+      activityType: 'article',
+      entityId: articleId,
       cacheKey: 'cache_articles',
     );
   }
@@ -321,9 +353,11 @@ class BackendService {
     String surveyId,
     String selectedOption,
   ) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/surveys/$surveyId/submit',
+      activityType: 'survey',
+      entityId: surveyId,
       cacheKey: 'cache_surveys',
       body: {'selectedOption': selectedOption},
     );
@@ -334,9 +368,11 @@ class BackendService {
   }
 
   Future<Map<String, dynamic>> completeStory(String storyId) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/stories/$storyId/complete',
+      activityType: 'story',
+      entityId: storyId,
       cacheKey: 'cache_stories',
     );
   }
@@ -358,43 +394,6 @@ class BackendService {
       '/api/devices/token',
       cacheKey: 'cache_device_token',
       body: {'token': token, 'platform': platform},
-    );
-  }
-
-  Future<Map<String, dynamic>> startTrip({
-    required String startStationId,
-    String source = 'manual',
-  }) {
-    return _sendJson(
-      'POST',
-      '/api/trips/start',
-      cacheKey: 'cache_active_trip',
-      queueOffline: true,
-      body: {
-        'startStationId': startStationId,
-        'source': source,
-        'detectedAt': DateTime.now().toIso8601String(),
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>> getActiveTrip() {
-    return _getMap('/api/trips/active', cacheKey: 'cache_active_trip');
-  }
-
-  Future<Map<String, dynamic>> endTrip({
-    required String tripId,
-    required String endStationId,
-  }) {
-    return _sendJson(
-      'POST',
-      '/api/trips/$tripId/end',
-      cacheKey: 'cache_active_trip',
-      queueOffline: true,
-      body: {
-        'endStationId': endStationId,
-        'endedAt': DateTime.now().toIso8601String(),
-      },
     );
   }
 
@@ -556,9 +555,11 @@ class BackendService {
     String? entityId,
     Map<String, dynamic>? metadata,
   }) {
-    return _sendJson(
+    return _sendRewardJson(
       'POST',
       '/api/activity-events',
+      activityType: 'activity',
+      entityId: type,
       cacheKey: 'cache_activity_event',
       body: {
         'type': type,
@@ -653,12 +654,12 @@ class BackendService {
     String? cityId,
     String? phase,
     RideVerification? ticketVerification,
+    CommuteSignal? location,
   }) {
     return _sendJson(
       'POST',
       '/api/trip/commute-session',
       cacheKey: 'cache_commute_session',
-      queueOffline: true,
       body: {
         'confidenceScore': confidenceScore,
         if (vibrationScore != null) 'vibrationScore': vibrationScore,
@@ -668,6 +669,7 @@ class BackendService {
         if (phase != null) 'phase': phase,
         if (ticketVerification != null)
           'ticketVerification': ticketVerification.toJson(),
+        if (location != null) 'location': location.toHeartbeatJson(),
         'detectedAt': DateTime.now().toIso8601String(),
       },
     );
@@ -681,20 +683,18 @@ class BackendService {
       'POST',
       '/api/trip/commute-session/$sessionId/end',
       cacheKey: 'cache_commute_session',
-      queueOffline: true,
-      body: {
-        if (endStationId != null) 'endStationId': endStationId,
-        'endedAt': DateTime.now().toIso8601String(),
-      },
+      body: {if (endStationId != null) 'endStationId': endStationId},
     );
   }
 
-  Future<Map<String, dynamic>> sendTripHeartbeat(String tripId) {
+  Future<Map<String, dynamic>> sendCommuteHeartbeat({
+    required String sessionId,
+    required CommuteSignal signal,
+  }) {
     return _sendJson(
       'POST',
-      '/api/trips/$tripId/heartbeat',
-      cacheKey: 'cache_trip_heartbeat',
-      body: {'clientTimeMs': DateTime.now().millisecondsSinceEpoch},
+      '/api/trip/commute-session/$sessionId/heartbeat',
+      body: signal.toHeartbeatJson(),
     );
   }
 
@@ -727,6 +727,13 @@ class BackendService {
             .timeout(const Duration(seconds: 12));
         final response = await http.Response.fromStream(streamed);
         if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (response.statusCode >= 400 && response.statusCode < 500) {
+            debugPrint(
+              'Outbox: dropping terminal mutation ${mutation.method} '
+              '${mutation.path} (${response.statusCode})',
+            );
+            continue;
+          }
           final next = mutation.copyWith(
             retryCount: mutation.retryCount + 1,
             lastError: response.body,
@@ -751,6 +758,7 @@ class BackendService {
     required String cacheKey,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    final scopedCacheKey = _scopedCacheKey(cacheKey);
     final headers = await _headers();
 
     try {
@@ -758,7 +766,7 @@ class BackendService {
           .get(_uri(path), headers: headers)
           .timeout(const Duration(seconds: 12));
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        await prefs.setString(cacheKey, response.body);
+        await prefs.setString(scopedCacheKey, response.body);
         return Map<String, dynamic>.from(
           jsonDecode(response.body) as Map<String, dynamic>,
         );
@@ -771,13 +779,21 @@ class BackendService {
           retryAfterSeconds: _retryAfter(response),
         );
       }
-      throw Exception('Request failed with ${response.statusCode}');
+      if (response.statusCode >= 400 && response.statusCode < 500) {
+        throw _TerminalHttpException(
+          response.statusCode,
+          response.body.isNotEmpty ? response.body : 'Request failed',
+        );
+      }
+      throw _RetryableHttpException(response.statusCode);
     } on BackendAuthException {
       rethrow;
     } on BackendRateLimitException {
       rethrow;
+    } on _TerminalHttpException {
+      rethrow;
     } catch (_) {
-      final cached = prefs.getString(cacheKey);
+      final cached = prefs.getString(scopedCacheKey);
       if (cached != null) {
         return Map<String, dynamic>.from(
           jsonDecode(cached) as Map<String, dynamic>,
@@ -796,7 +812,7 @@ class BackendService {
   Future<Map<String, dynamic>> _sendJson(
     String method,
     String path, {
-    String? cacheKey,           // null = no cache (write/action endpoints)
+    String? cacheKey, // null = no cache (write/action endpoints)
     Map<String, dynamic>? body,
     bool queueOffline = false,
   }) async {
@@ -826,7 +842,8 @@ class BackendService {
           );
         }
         if (response.statusCode >= 400 && response.statusCode < 500) {
-          throw Exception(
+          throw _TerminalHttpException(
+            response.statusCode,
             response.body.isNotEmpty ? response.body : 'Request failed',
           );
         }
@@ -837,7 +854,9 @@ class BackendService {
 
         final prefs = await SharedPreferences.getInstance();
         if (response.body.isNotEmpty) {
-          if (cacheKey != null) await prefs.setString(cacheKey, response.body);
+          if (cacheKey != null) {
+            await prefs.setString(_scopedCacheKey(cacheKey), response.body);
+          }
           return Map<String, dynamic>.from(
             jsonDecode(response.body) as Map<String, dynamic>,
           );
@@ -847,11 +866,11 @@ class BackendService {
         rethrow; // never retry / never queue
       } on BackendRateLimitException {
         rethrow; // never retry / never queue
+      } on _TerminalHttpException {
+        rethrow; // never retry / never queue
       } catch (error) {
         lastError = error;
-        // Only network/timeout/5xx are retryable; a 4xx is an Exception we
-        // already rethrew above is not reachable here. Back off and retry while
-        // attempts remain.
+        // Only network, timeout, and 5xx outcomes reach this branch.
         if (attempt < _maxSendAttempts) {
           await Future<void>.delayed(_backoffDelay(attempt));
           continue;
@@ -880,6 +899,31 @@ class BackendService {
       };
     }
     throw lastError ?? Exception('Request failed');
+  }
+
+  Future<Map<String, dynamic>> _sendRewardJson(
+    String method,
+    String path, {
+    required String activityType,
+    required String entityId,
+    String? cacheKey,
+    Map<String, dynamic>? body,
+  }) async {
+    final attempt = await _sendJson(
+      'POST',
+      '/api/reward-attempts',
+      body: {'activityType': activityType, 'entityId': entityId},
+    );
+    final attemptId = attempt['attemptId'] as String?;
+    if (attemptId == null) {
+      throw Exception('Could not create a secure reward attempt.');
+    }
+    return _sendJson(
+      method,
+      path,
+      cacheKey: cacheKey,
+      body: {...?body, 'attemptId': attemptId},
+    );
   }
 
   /// Exponential backoff with full jitter: base 300ms * 2^(attempt-1), randomised

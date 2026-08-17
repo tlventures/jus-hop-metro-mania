@@ -105,11 +105,11 @@ class _PrivacyConsentScreenState extends State<PrivacyConsentScreen> {
                 children: [
                   _PrivacyLink(
                     label: 'Privacy Policy',
-                    url: 'https://metrosafar.app/privacy',
+                    url: 'https://metrosafar.in/privacy',
                   ),
                   _PrivacyLink(
                     label: 'Terms of Service',
-                    url: 'https://metrosafar.app/terms',
+                    url: 'https://metrosafar.in/terms',
                   ),
                 ],
               ),

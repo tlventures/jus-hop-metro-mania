@@ -13,12 +13,15 @@ class StoriesScreen extends ConsumerStatefulWidget {
 }
 
 class _StoriesScreenState extends ConsumerState<StoriesScreen> {
+  bool _loading = true;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(storiesProvider.notifier).fetchStories(),
-    );
+    Future.microtask(() async {
+      await ref.read(storiesProvider.notifier).fetchStories();
+      if (mounted) setState(() => _loading = false);
+    });
   }
 
   @override
@@ -39,91 +42,131 @@ class _StoriesScreenState extends ConsumerState<StoriesScreen> {
         backgroundColor: colorScheme.surface,
         elevation: 0,
       ),
-      body: stories.isEmpty
-          ? Center(
-              child: CircularProgressIndicator(),
-            )
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.s6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Progress indicator
-                        Container(
-                          padding: const EdgeInsets.all(AppSpacing.s4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.tertiary.withValues(alpha: 0.1),
-                            borderRadius: AppRadius.borderRadiusL,
-                            border: Border.all(
-                              color: colorScheme.tertiary.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '📖 Stories Completed',
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: colorScheme.onSurface,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$completedCount/${stories.length}',
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: colorScheme.tertiary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: AppSpacing.s3),
-                              ClipRRect(
-                                borderRadius: AppRadius.borderRadiusS,
-                                child: LinearProgressIndicator(
-                                  value: stories.isEmpty ? 0.0 : completedCount / stories.length,
-                                  minHeight: 8,
-                                  backgroundColor: colorScheme.outline.withValues(alpha: 0.2),
-                                  valueColor: AlwaysStoppedAnimation(colorScheme.tertiary),
-                                ),
-                              ),
-                            ],
-                          ),
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : stories.isEmpty
+              ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.s8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('📚', style: AppTypography.displayLarge),
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(
+                        'No stories yet for your city',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: colorScheme.onSurface,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: AppSpacing.s2),
+                      Text(
+                        'Station stories are coming soon — check back later.',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s6),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
+              )
+              : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.s6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Progress indicator
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.s4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.tertiary.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: AppRadius.borderRadiusL,
+                              border: Border.all(
+                                color: colorScheme.tertiary.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '📖 Stories Completed',
+                                      style: AppTypography.labelSmall.copyWith(
+                                        color: colorScheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$completedCount/${stories.length}',
+                                      style: AppTypography.labelSmall.copyWith(
+                                        color: colorScheme.tertiary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.s3),
+                                ClipRRect(
+                                  borderRadius: AppRadius.borderRadiusS,
+                                  child: LinearProgressIndicator(
+                                    value:
+                                        stories.isEmpty
+                                            ? 0.0
+                                            : completedCount / stories.length,
+                                    minHeight: 8,
+                                    backgroundColor: colorScheme.outline
+                                        .withValues(alpha: 0.2),
+                                    valueColor: AlwaysStoppedAnimation(
+                                      colorScheme.tertiary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s6,
+                    ),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
                         final story = stories[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.s4),
                           child: _StoryCard(
                             story: story,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => _StoryDetail(story: story),
-                              ),
-                            ),
+                            onTap:
+                                () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => _StoryDetail(story: story),
+                                  ),
+                                ),
                           ),
                         );
-                      },
-                      childCount: stories.length,
+                      }, childCount: stories.length),
                     ),
                   ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.s6)),
-              ],
-            ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: AppSpacing.s6),
+                  ),
+                ],
+              ),
     );
   }
 }
@@ -132,10 +175,7 @@ class _StoryCard extends StatelessWidget {
   final dynamic story;
   final VoidCallback onTap;
 
-  const _StoryCard({
-    required this.story,
-    required this.onTap,
-  });
+  const _StoryCard({required this.story, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -148,16 +188,11 @@ class _StoryCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainer,
           borderRadius: AppRadius.borderRadiusL,
-          border: Border.all(
-            color: colorScheme.outline.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: colorScheme.outline.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
-            Text(
-              story.imageUrl ?? '📖',
-              style: const TextStyle(fontSize: 48),
-            ),
+            Text(story.imageUrl ?? '📖', style: const TextStyle(fontSize: 48)),
             const SizedBox(width: AppSpacing.s4),
             Expanded(
               child: Column(
@@ -335,20 +370,38 @@ class _StoryDetailState extends ConsumerState<_StoryDetail> {
                         child: const Text('← Previous'),
                       ),
                     ),
-                  if (currentFrameIndex > 0) const SizedBox(width: AppSpacing.s3),
+                  if (currentFrameIndex > 0)
+                    const SizedBox(width: AppSpacing.s3),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (isLastFrame) {
-                          ref.read(storiesProvider.notifier).completeStory(widget.story.id);
+                          final accepted = await ref
+                              .read(storiesProvider.notifier)
+                              .completeStory(widget.story.id);
+                          if (!context.mounted) return;
+                          final messenger = ScaffoldMessenger.of(context);
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Story completed! +${widget.story.points} points'),
-                              duration: const Duration(seconds: 2),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
+                          if (accepted) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Story completed! +${widget.story.points} points',
+                                ),
+                                duration: const Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } else {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Open Ride Mode to earn story points.',
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
                         } else {
                           setState(() => currentFrameIndex++);
                         }

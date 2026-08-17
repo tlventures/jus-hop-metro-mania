@@ -28,7 +28,7 @@ class _TicketVerificationSheet extends StatefulWidget {
 class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
   final _controller = TextEditingController();
   final _scannerController = MobileScannerController();
-  String _method = 'manual';
+  String _method = 'qr';
   bool _showScanner = false;
   bool _handledScan = false;
 
@@ -41,10 +41,12 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
 
   void _submit() {
     final code = _controller.text.trim();
-    if (code.length < 6) {
+    if (_method != 'qr' || code.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter or scan a valid ticket code to start.'),
+          content: Text(
+            'Scan an official MetroSafar station QR code to start.',
+          ),
         ),
       );
       return;
@@ -69,7 +71,9 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
       _handledScan = false; // allow a re-scan
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid QR code — please scan an official MetroSafar station code.'),
+          content: Text(
+            'Invalid QR code — please scan an official MetroSafar station code.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -151,7 +155,7 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
               ),
               const SizedBox(height: AppSpacing.s3),
               Text(
-                'Scan the QR/barcode on your metro ticket, or enter the ticket reference code. Rewards start only after verification.',
+                'Scan the official MetroSafar QR at the station. Rewards start only after the backend verifies it.',
                 style: AppTypography.bodyMedium.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -182,10 +186,12 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
                       },
                       icon: Icon(
                         _showScanner
-                            ? Icons.keyboard_outlined
+                            ? Icons.close
                             : Icons.qr_code_scanner_outlined,
                       ),
-                      label: Text(_showScanner ? 'Enter code' : 'Scan ticket'),
+                      label: Text(
+                        _showScanner ? 'Close scanner' : 'Scan station QR',
+                      ),
                     ),
                   ),
                 ],
@@ -193,15 +199,12 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
               const SizedBox(height: AppSpacing.s3),
               TextField(
                 controller: _controller,
-                textInputAction: TextInputAction.done,
-                textCapitalization: TextCapitalization.characters,
+                readOnly: true,
                 decoration: const InputDecoration(
-                  labelText: 'Ticket or QR reference',
-                  hintText: 'Example: 8F4K2A91',
-                  prefixIcon: Icon(Icons.confirmation_number_outlined),
+                  labelText: 'Verified station token',
+                  hintText: 'Scan the station QR above',
+                  prefixIcon: Icon(Icons.qr_code_2_outlined),
                 ),
-                onChanged: (_) => _method = 'manual',
-                onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: AppSpacing.s4),
               FilledButton.icon(
@@ -216,7 +219,7 @@ class _TicketVerificationSheetState extends State<_TicketVerificationSheet> {
               ),
               const SizedBox(height: AppSpacing.s2),
               Text(
-                'MetroSafar uses this only to verify reward eligibility. The backend stores a protected token instead of the raw ticket code.',
+                'The QR is checked by the backend and expires automatically. A screenshot or manually entered ticket number cannot activate rewards.',
                 style: AppTypography.bodySmall.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),

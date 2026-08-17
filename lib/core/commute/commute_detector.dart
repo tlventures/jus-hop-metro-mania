@@ -43,27 +43,29 @@ class CommuteDetector {
     if (now.difference(_lastLocationSample).inSeconds < 20) return;
     _lastLocationSample = now;
 
+    final signal = await captureHeartbeat(
+      stations,
+      vibrationScore: vibrationScore,
+    );
+    if (signal != null) _signals.add(signal);
+  }
+
+  Future<CommuteSignal?> captureHeartbeat(
+    List<MetroStation> stations, {
+    double vibrationScore = 0,
+  }) async {
     try {
-      // Silently skip location award if the device is spoofing GPS.
-      // Fail-OPEN (return true) on plugin errors so genuine edge-cases
-      // (e.g. plugin unavailable) are not penalised.
       final trustworthy = await _deviceTrustworthy();
-      if (!trustworthy) return;
+      if (!trustworthy) return null;
 
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        _signals.add(
-          CommuteSignal(
-            confidenceScore: vibrationScore * 0.45,
-            vibrationScore: vibrationScore,
-          ),
-        );
-        return;
+        return null;
       }
 
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
+        desiredAccuracy: LocationAccuracy.high,
       ).timeout(const Duration(seconds: 6));
       final speedKmh = _speedKmh(position);
       final station = _nearestStation(position, stations);
@@ -73,35 +75,32 @@ class CommuteDetector {
           (vibrationScore * 0.45) +
           (metroSpeed ? 0.35 : 0) +
           (nearStation ? 0.25 : 0);
-      _signals.add(
-        CommuteSignal(
-          confidenceScore: confidence.clamp(0, 1),
-          vibrationScore: vibrationScore,
-          speedKmh: speedKmh,
-          station: station,
-        ),
+      final signal = CommuteSignal(
+        confidenceScore: confidence.clamp(0, 1),
+        vibrationScore: vibrationScore,
+        speedKmh: speedKmh,
+        station: station,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracyMeters: position.accuracy,
+        recordedAt: position.timestamp,
+        deviceTrusted: trustworthy && !position.isMocked,
       );
       _lastPosition = position;
+      return signal;
     } catch (_) {
-      _signals.add(
-        CommuteSignal(
-          confidenceScore: vibrationScore * 0.45,
-          vibrationScore: vibrationScore,
-        ),
-      );
+      return null;
     }
   }
 
   /// Returns false if the device is running mock locations or is an emulator.
-  /// Fail-OPEN on plugin error (returns true) to avoid false-positives on
-  /// genuine devices where the plugin can't execute.
   Future<bool> _deviceTrustworthy() async {
     try {
       final isMock = await SafeDevice.isMockLocation;
       final isReal = await SafeDevice.isRealDevice;
       return isReal && !isMock;
     } catch (_) {
-      return true; // fail-open
+      return false;
     }
   }
 

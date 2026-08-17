@@ -750,7 +750,7 @@ function installPhase56Middleware(app, context) {
       return;
     }
 
-    const docId = hashId(`${req.clientId}:${key}`);
+    const docId = hashId(`${req.clientId}:${req.method}:${req.path}:${key}`);
     const ref = context.firestore.collection('metrosafar_idempotency_keys').doc(docId);
 
     try {
@@ -792,27 +792,24 @@ function installPhase56Middleware(app, context) {
 
 function installPhase56Routes(app, context) {
   app.post('/api/trips/start', async (req, res, next) => {
-    try {
-      res.json(await startTrip(context, req.clientId, req.body));
-    } catch (error) {
-      next(error);
-    }
+    res.status(410).json({
+      error: 'Legacy Trip Mode has been replaced by verified Ride Mode.',
+      reason: 'verified_commute_required',
+    });
   });
 
   app.post('/api/trips/:tripId/heartbeat', async (req, res, next) => {
-    try {
-      res.json(await updateTripHeartbeat(context, req.clientId, req.params.tripId, req.body));
-    } catch (error) {
-      next(error);
-    }
+    res.status(410).json({
+      error: 'Legacy trip heartbeats are no longer accepted.',
+      reason: 'verified_commute_required',
+    });
   });
 
   app.post('/api/trips/:tripId/end', async (req, res, next) => {
-    try {
-      res.json(await endTrip(context, req.clientId, req.params.tripId, req.body));
-    } catch (error) {
-      next(error);
-    }
+    res.status(410).json({
+      error: 'Legacy Trip Mode has been replaced by verified Ride Mode.',
+      reason: 'verified_commute_required',
+    });
   });
 
   app.get('/api/trips/active', async (req, res, next) => {

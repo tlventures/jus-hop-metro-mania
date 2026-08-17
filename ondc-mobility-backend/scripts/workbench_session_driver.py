@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+"""
+Drive the currently active ONDC Workbench flow from Workbench session state.
+
+This complements workbench_autopilot.py. It does not create a Workbench flow;
+start the flow in Workbench first, then run this script with the session id from
+the URL. The script reads the active flow, transaction id, version, and next BAP
+step from Workbench, then sends the corresponding signed Buyer request.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from copy import copy
+from typing import Any
+
+import httpx
+
+import workbench_trigger
+
+
+WORKBENCH_UI_BASE = "https://workbench.ondc.tech/backend-ui"
+SUPPORTED_BAP_ACTIONS = {"search", "select", "init", "confirm", "status", "cancel", "update", "issue", "support"}
+TICKET_CODE_FALLBACKS = {
+    "SJT": {"item_id": "I1", "amount": "60"},
+    "RJT": {"item_id": "I2", "amount": "110"},
+}
+
+
+def get_json(client: httpx.Client, url: str, *, params: dict[str, Any]) -> dict[str, Any]:
+    response = client.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError(f"Unexpected response from {url}: {type(data).__name__}")
+    return data
+
+
+def session_state(client: httpx.Client, session_id: str) -> dict[str, Any]:
+    return get_json(client, f"{WORKBENCH_UI_BASE}/sessions", params={"session_id": session_id})
+
+
+def current_flow_state(client: httpx.Client, session_id: str, transaction_id: str) -> dict[str, Any]:
+    return get_json(
+        client,
+        f"{WORKBENCH_UI_BASE}/flow/current-state",
+        params={"session_id": session_id, "transaction_id": transaction_id},
+    )
+
+
+def next_bap_step(flow_state: dict[str, Any]) -> dict[str, Any] | None:
+    sequence = flow_state.get("sequence", [])
+    pending_idx = None
+    for idx, step in enumerate(sequence):
+        if (
+            step.get("owner") == "BAP"
+            and step.get("actionType") in SUPPORTED_BAP_ACTIONS
+            and step.get("status") in {"WAITING", "LISTENING"}
+        ):
+            pending_idx = idx
+            break
+    if pending_idx is None:
+        return None
+    for prior in sequence[:pending_idx]:
+        if prior.get("status") not in {"COMPLETE", "SUCCESS"}:
+            return None
+    return sequence[pending_idx]
+
+
+def summarize_steps(flow_state: dict[str, Any]) -> str:
+    rows = []
+    for step in flow_state.get("sequence", []):
+        rows.append(
+            f"{step.get('index')}: {step.get('actionId')} "
+            f"({step.get('owner')}/{step.get('actionType')}) {step.get('status')}"
+        )
+    return "\n".join(rows)
+
+
+def _iter_dicts(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _iter_dicts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_dicts(item)
+
+
+def _ticket_code_for(flow_id: str, action_id: str) -> str | None:
+    text = f"{flow_id} {action_id}".upper()
+    if "RJT" in text or "RETURN" in text or "ROUND" in text:
+        return "RJT"
+    if "SJT" in text or "SINGLE" in text:
+        return "SJT"
+    return None
+
+
+def _item_ticket_code(item: dict[str, Any]) -> str | None:
+    descriptor = item.get("descriptor") if isinstance(item.get("descriptor"), dict) else {}
+    code = str(descriptor.get("code") or "").upper()
+    if code in TICKET_CODE_FALLBACKS:
+        return code
+    name = str(descriptor.get("name") or "").upper()
+    if "RETURN" in name or "ROUND" in name:
+        return "RJT"
+    if "SINGLE" in name:
+        return "SJT"
+    return None
+
+
+def _catalog_ticket_selection(flow_state: dict[str, Any] | None, ticket_code: str) -> dict[str, str] | None:
+    if not flow_state:
+        return None
+    for candidate in _iter_dicts(flow_state):
+        items = candidate.get("items")
+        if not isinstance(items, list):
+            continue
+        provider_id = candidate.get("id") if isinstance(candidate.get("id"), str) else None
+        for item in items:
+            if not isinstance(item, dict) or _item_ticket_code(item) != ticket_code:
+                continue
+            item_id = item.get("id")
+            if not item_id:
+                continue
+            price = item.get("price") if isinstance(item.get("price"), dict) else {}
+            selection = {"item_id": str(item_id)}
+            if provider_id:
+                selection["provider_id"] = provider_id
+            if price.get("value") is not None:
+                selection["amount"] = str(price["value"])
+            return selection
+    return None
+
+
+def complete_payloads(client: httpx.Client, payload_ids: list[str]) -> list[dict[str, Any]]:
+    if not payload_ids:
+        return []
+    response = client.post(f"{WORKBENCH_UI_BASE}/db/payload", json={"payload_ids": payload_ids})
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else []
+
+
+def _apply_payload_identifiers(args: argparse.Namespace, payload: dict[str, Any]) -> None:
+    message = payload.get("message", {}) if isinstance(payload, dict) else {}
+    order = message.get("order", {}) if isinstance(message, dict) else {}
+    catalog = message.get("catalog", {}) if isinstance(message, dict) else {}
+    issue = message.get("issue", {}) if isinstance(message, dict) else {}
+
+    issue_actions = issue.get("issue_actions", {}) if isinstance(issue, dict) else {}
+    complainant_actions = issue_actions.get("complainant_actions") if isinstance(issue_actions, dict) else None
+    if isinstance(complainant_actions, list) and complainant_actions:
+        existing = list(getattr(args, "past_complainant_actions", []) or [])
+        for action in complainant_actions:
+            if action not in existing:
+                existing.append(action)
+        args.past_complainant_actions = existing
+
+    order_id = order.get("id") if isinstance(order, dict) else None
+    if order_id:
+        args.order_id = str(order_id)
+
+    provider = order.get("provider", {}) if isinstance(order, dict) else {}
+    provider_id = provider.get("id") if isinstance(provider, dict) else None
+    if provider_id:
+        args.provider_id = str(provider_id)
+
+    items = order.get("items", []) if isinstance(order, dict) else []
+    if isinstance(items, list) and items and isinstance(items[0], dict):
+        item = items[0]
+        if item.get("id"):
+            args.item_id = str(item["id"])
+        price = item.get("price") if isinstance(item.get("price"), dict) else {}
+        if price.get("value") is not None:
+            args.amount = str(price["value"])
+
+    payments = order.get("payments", []) if isinstance(order, dict) else []
+    if isinstance(payments, list) and payments and isinstance(payments[0], dict) and payments[0].get("id"):
+        args.payment_id = str(payments[0]["id"])
+
+    fulfillments = order.get("fulfillments", []) if isinstance(order, dict) else []
+    if isinstance(fulfillments, list) and fulfillments:
+        fulfillment_ids = [str(item["id"]) for item in fulfillments if isinstance(item, dict) and item.get("id")]
+        if fulfillment_ids:
+            args.fulfillment_id = fulfillment_ids[0]
+            args.partial_fulfillment_id = fulfillment_ids[1] if len(fulfillment_ids) > 1 else fulfillment_ids[0]
+        for fulfillment in fulfillments:
+            if not isinstance(fulfillment, dict):
+                continue
+            for stop in fulfillment.get("stops") or []:
+                authorization = stop.get("authorization") if isinstance(stop, dict) else None
+                status = authorization.get("status") if isinstance(authorization, dict) else None
+                if status in {"CLAIMED", "UNCLAIMED"}:
+                    args.issue_fulfillment_state = status
+                    break
+            if getattr(args, "issue_fulfillment_state", None):
+                break
+
+    providers = catalog.get("bpp_providers", []) if isinstance(catalog, dict) else []
+    if isinstance(providers, list) and providers and isinstance(providers[0], dict):
+        ticket_code = _ticket_code_for(getattr(args, "flow_id", ""), getattr(args, "action_id", ""))
+        if ticket_code:
+            selection = _catalog_ticket_selection({"catalog": catalog}, ticket_code)
+            if selection:
+                args.item_id = selection["item_id"]
+                if selection.get("provider_id"):
+                    args.provider_id = selection["provider_id"]
+                if selection.get("amount"):
+                    args.amount = selection["amount"]
+                return
+        args.provider_id = str(providers[0].get("id") or args.provider_id)
+        provider_items = providers[0].get("items", [])
+        if isinstance(provider_items, list) and provider_items and isinstance(provider_items[0], dict) and provider_items[0].get("id"):
+            args.item_id = str(provider_items[0]["id"])
+
+
+def learn_identifiers_from_flow_state(args: argparse.Namespace, client: httpx.Client, flow_state: dict[str, Any]) -> None:
+    payload_cache = getattr(args, "_workbench_payload_cache", None)
+    if payload_cache is None:
+        payload_cache = {}
+        setattr(args, "_workbench_payload_cache", payload_cache)
+
+    payload_ids: list[str] = []
+    for step in flow_state.get("sequence") or []:
+        if step.get("status") != "COMPLETE":
+            continue
+        payloads = (step.get("payloads") or {}).get("payloads") or []
+        for item in payloads:
+            payload_id = item.get("payloadId")
+            if payload_id and payload_id not in payload_cache:
+                payload_ids.append(payload_id)
+
+    for payload_id, item in zip(payload_ids, complete_payloads(client, payload_ids)):
+        payload_cache[payload_id] = item.get("req") if isinstance(item, dict) else None
+
+    for payload in payload_cache.values():
+        if isinstance(payload, dict):
+            _apply_payload_identifiers(args, payload)
+
+
+def _apply_ticket_selection(args: argparse.Namespace, action: str, flow_state: dict[str, Any] | None) -> None:
+    if action not in {"select", "init", "confirm", "update"}:
+        return
+    ticket_code = _ticket_code_for(getattr(args, "flow_id", ""), getattr(args, "action_id", ""))
+    if not ticket_code:
+        return
+    selection = _catalog_ticket_selection(flow_state, ticket_code) or TICKET_CODE_FALLBACKS[ticket_code]
+    args.item_id = selection["item_id"]
+    if selection.get("provider_id"):
+        args.provider_id = selection["provider_id"]
+    if selection.get("amount"):
+        args.amount = selection["amount"]
+
+
+def configure_step_args(base_args: argparse.Namespace, session: dict[str, Any], step: dict[str, Any], flow_state: dict[str, Any] | None = None) -> argparse.Namespace:
+    args = copy(base_args)
+    action = step["actionType"]
+    action_id = step.get("actionId", "")
+    args.action_id = action_id
+    args.action = action
+
+    args.flow_id = str(base_args.flow_id or session.get("activeFlow") or "")
+    flow_id_lower = args.flow_id.lower()
+    args.domain = str(session.get("domain") or getattr(args, "domain", "ONDC:TRV11")).strip("/")
+    args.version = str(session.get("version") or getattr(args, "version", "2.0.0")).strip("/")
+
+    args.subscriber_uri = str(session.get("subscriberUrl") or args.subscriber_uri)
+    args.workbench_base = (
+        f"https://workbench.ondc.tech/api-service/"
+        f"{args.domain}/{args.version}/seller"
+    )
+    args.catalog = action == "search" and "search1" in action_id
+    if action == "search" and "search1" in action_id.lower():
+        args.include_bpp_in_search = False
+    elif action == "search":
+        args.include_bpp_in_search = True
+
+    if action == "issue":
+        action_id_lower = action_id.lower()
+        args.issue_status = "CLOSED" if "close" in action_id_lower else "OPEN"
+        if "info" in action_id_lower:
+            args.issue_action = "INFO_PROVIDED"
+            args.issue_short_desc = "Additional ticket details provided"
+            args.issue_long_desc = "Passenger provided additional details requested for the metro ticket issue."
+        elif "accept" in action_id_lower:
+            args.issue_action = "RESOLUTION_ACCEPTED"
+            args.issue_short_desc = "Resolution accepted"
+            args.issue_long_desc = "Passenger accepted the proposed issue resolution."
+        elif "reject" in action_id_lower:
+            args.issue_action = "RESOLUTION_REJECTED"
+            args.issue_short_desc = "Resolution rejected"
+            args.issue_long_desc = "Passenger rejected the proposed issue resolution."
+        elif "escalate" in action_id_lower:
+            args.issue_action = "ESCALATE"
+            args.issue_short_desc = "Issue escalated"
+            args.issue_long_desc = "Passenger escalated the issue."
+        elif "close" in action_id_lower:
+            args.issue_action = "CLOSE"
+            args.issue_short_desc = "Issue closed"
+            args.issue_long_desc = "Passenger closed the metro ticket issue."
+        else:
+            args.issue_action = "OPEN"
+
+        comp_actions = list(getattr(args, "past_complainant_actions", []) or [])
+        resp_actions = []
+        if flow_state:
+            for s in flow_state.get("sequence", []):
+                p_obj = s.get("payloads") or {}
+                p_list = p_obj.get("payloads") or []
+                for item in p_list:
+                    req = item.get("request") or item.get("payload") or {}
+                    msg_issue = req.get("message", {}).get("issue", {})
+                    if msg_issue:
+                        act_obj = msg_issue.get("issue_actions", {})
+                        for ca in act_obj.get("complainant_actions") or []:
+                            if ca not in comp_actions:
+                                comp_actions.append(ca)
+                        for ra in act_obj.get("respondent_actions") or []:
+                            if ra not in resp_actions:
+                                resp_actions.append(ra)
+
+        args.past_complainant_actions = comp_actions
+        args.past_respondent_actions = resp_actions
+
+    if flow_state:
+        msg_ids = {}
+        for s in flow_state.get("sequence", []):
+            p_obj = s.get("payloads") or {}
+            p_list = p_obj.get("payloads") or []
+            for item in p_list:
+                req = item.get("request") or item.get("payload") or {}
+                ctx = req.get("context") or {}
+                if ctx.get("action") and ctx.get("message_id"):
+                    msg_ids[ctx["action"]] = ctx["message_id"]
+
+        if args.version.startswith("2.0.0"):
+            if action == "init" and "search" in msg_ids:
+                args.message_id = msg_ids["search"]
+            elif action == "confirm" and "init" in msg_ids:
+                args.message_id = msg_ids["init"]
+            elif action == "status" and "confirm" in msg_ids:
+                args.message_id = msg_ids["confirm"]
+
+    if action == "cancel":
+        action_id_lower = action_id.lower()
+        if "tech" in action_id_lower or "hard" in action_id_lower or "confirm" in action_id_lower or action_id_lower.endswith("_2"):
+            args.cancel_code = "CONFIRM_CANCEL"
+        else:
+            args.cancel_code = "SOFT_CANCEL"
+        args.cancel_name = "Ride Cancellation"
+        args.reason_id = "000" if "tech" in action_id_lower else "001"
+    if action == "status" and "tech_cancel" in action_id.lower():
+        args.status_ref_id = args.transaction_id
+    if action == "update" and ("partial_cancellation" in flow_id_lower or "partial_cancellation" in action_id.lower()):
+        args.partial_cancellation = True
+        args.fulfillment_id = getattr(args, "partial_fulfillment_id", None) or args.fulfillment_id or "F2"
+        args.reason_id = "001"
+        if action_id.endswith("202") or action_id.endswith("_2"):
+            args.cancel_code = "CONFIRM_CANCEL"
+        else:
+            args.cancel_code = "SOFT_CANCEL"
+    if "partial_cancellation" in flow_id_lower and action in {"select", "init", "confirm"}:
+        args.passenger_count = max(int(args.passenger_count), 2)
+    _apply_ticket_selection(args, action, flow_state)
+    return args
+
+
+def send_signed(args: argparse.Namespace) -> tuple[dict[str, Any], httpx.Response]:
+    payload = workbench_trigger.build_payload(args)
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    private_key = workbench_trigger.load_private_key(args.key_file)
+    headers = workbench_trigger.auth_headers(body, args.subscriber_id, args.unique_key_id, private_key)
+    url = f"{args.workbench_base.rstrip('/')}/{args.action}"
+    with httpx.Client(timeout=args.request_timeout) as client:
+        response = client.post(url, content=body, headers=headers)
+    return payload, response
+
+
+def run_once(args: argparse.Namespace, client: httpx.Client) -> bool:
+    session = session_state(client, args.session_id)
+    flow_id = args.flow_id or session.get("activeFlow")
+    if not flow_id or flow_id == "NONE":
+        raise RuntimeError("No active Workbench flow. Start a flow in the Workbench UI first.")
+
+    flow_map = session.get("flowMap") or {}
+    transaction_id = args.transaction_id or flow_map.get(flow_id)
+    if not transaction_id:
+        raise RuntimeError(f"No transaction id found for active flow {flow_id!r}. Press the play/start button in Workbench first.")
+
+    args.transaction_id = transaction_id
+    flow_state = current_flow_state(client, args.session_id, transaction_id)
+    learn_identifiers_from_flow_state(args, client, flow_state)
+    step = next_bap_step(flow_state)
+
+    print(f"session_id={args.session_id}")
+    print(f"flow_id={flow_id}")
+    print(f"transaction_id={transaction_id}")
+    print(f"session_version={session.get('version')}")
+    if not step:
+        print("No waiting BAP step found.")
+        print(summarize_steps(flow_state))
+        return False
+
+    step_args = configure_step_args(args, session, step, flow_state=flow_state)
+    print(f"next_step={step.get('actionId')} action={step_args.action} version={step_args.version}")
+    if args.dry_run:
+        print(json.dumps(workbench_trigger.build_payload(step_args), indent=2))
+        return True
+
+    payload, response = send_signed(step_args)
+    print(f"request_message_id={payload['context']['message_id']}")
+    print(f"http_status={response.status_code}")
+    try:
+        print(json.dumps(response.json(), indent=2))
+    except Exception:
+        print(response.text)
+
+    return response.status_code < 400 and response.json().get("message", {}).get("ack", {}).get("status") == "ACK"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Send the next BAP request for an active Workbench session.")
+    parser.add_argument("--session-id", required=True, help="Workbench sessionId from the flow-testing URL.")
+    parser.add_argument("--flow-id", help="Workbench flow id. Defaults to session activeFlow.")
+    parser.add_argument("--transaction-id", help="Override transaction id; defaults to session flowMap[activeFlow].")
+    parser.add_argument("--until-done", action="store_true", help="Keep sending the next BAP step until none remains or an error occurs.")
+    parser.add_argument("--delay", type=float, default=4.0, help="Delay between steps in --until-done mode.")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--request-timeout", type=float, default=20.0)
+
+    parser.add_argument("--subscriber-id", default="ondc.metrosafar.in")
+    parser.add_argument("--subscriber-uri", default="https://ondc.metrosafar.in/ondc")
+    parser.add_argument("--unique-key-id", default="d6acb12b-6334-4a01-8825-e5f1b60f01f5")
+    parser.add_argument("--key-file", type=workbench_trigger.Path, default=workbench_trigger.DEFAULT_KEY_FILE)
+    parser.add_argument("--bpp-id", default="workbench.ondc.tech")
+    parser.add_argument("--domain", default="ONDC:TRV11")
+    parser.add_argument("--version", default="2.0.0")
+    parser.add_argument("--country-code", default="IND")
+    parser.add_argument("--city-code", default="std:040")
+    parser.add_argument("--origin", default="MOCK_STATION_1")
+    parser.add_argument("--destination", default="MOCK_STATION_2")
+    parser.add_argument("--provider-id", default="P1")
+    parser.add_argument("--item-id", default="I1")
+    parser.add_argument("--fulfillment-id", default="F1")
+    parser.add_argument("--passenger-count", type=int, default=1)
+    parser.add_argument("--passenger-name", default="MetroSafar Test User")
+    parser.add_argument("--passenger-phone", default="+91-9999999999")
+    parser.add_argument("--passenger-email", default="test@metrosafar.in")
+    parser.add_argument("--amount", default="60")
+    parser.add_argument("--payment-txn-id", default=None)
+    parser.add_argument("--order-id", default="077b248f")
+    parser.add_argument("--reason-id", default="001")
+    parser.add_argument("--cancel-code", default="SOFT_CANCEL")
+    parser.add_argument("--cancel-name", default="Ride Cancellation")
+    parser.add_argument("--update-target", default="order.fulfillments")
+    parser.add_argument("--update-count", type=int, default=1)
+    parser.add_argument("--update-end-code", default="MOCK_STATION_5")
+    parser.add_argument("--fulfillment-state", default="CANCELLED")
+    parser.add_argument("--static-terms-url", default="https://ondc.metrosafar.in/terms")
+    parser.add_argument("--issue-id", default=None)
+    parser.add_argument("--issue-status", default="OPEN")
+    parser.add_argument("--issue-category", default="FULFILLMENT")
+    parser.add_argument("--issue-sub-category", default="FLM101")
+    parser.add_argument("--issue-type", default="ISSUE")
+    parser.add_argument("--issue-action", default=None)
+    parser.add_argument("--issue-short-desc", default="Ticket journey support")
+    parser.add_argument("--issue-long-desc", default="Passenger needs assistance with the metro ticket journey.")
+    parser.add_argument("--issue-resolution", default="Issue resolved by seller.")
+    parser.add_argument("--issue-expected-response-time", default="PT2H")
+    parser.add_argument("--issue-expected-resolution-time", default="P1D")
+    parser.add_argument("--issue-created-at", default=None)
+    parser.add_argument("--rating", default="THUMBS-UP")
+    parser.set_defaults(include_bpp_in_search=True)
+
+    args = parser.parse_args()
+    if args.issue_id is None:
+        args.issue_id = workbench_trigger.uuid.uuid4().hex
+    return args
+
+
+def main() -> int:
+    args = parse_args()
+    with httpx.Client(timeout=args.request_timeout) as client:
+        while True:
+            ok = run_once(args, client)
+            if not args.until_done or not ok:
+                return 0 if ok else 1
+            time.sleep(args.delay)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
