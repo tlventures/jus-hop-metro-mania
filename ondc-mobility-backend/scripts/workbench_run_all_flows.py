@@ -19,6 +19,28 @@ import workbench_trigger
 WORKBENCH_UI_BASE = "https://workbench.ondc.tech/backend-ui"
 
 
+def get_with_retry(client: httpx.Client, url: str, *, params: dict[str, Any], attempts: int = 5) -> httpx.Response:
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = client.get(url, params=params)
+            if response.status_code < 500:
+                response.raise_for_status()
+                return response
+            last_exc = httpx.HTTPStatusError(
+                f"Server error '{response.status_code}' for url '{response.url}'",
+                request=response.request,
+                response=response,
+            )
+        except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            last_exc = exc
+        if attempt < attempts:
+            time.sleep(min(2 * attempt, 8))
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Unable to fetch {url}")
+
+
 def base_args(args: argparse.Namespace) -> SimpleNamespace:
     return SimpleNamespace(
         session_id=args.session_id,
@@ -75,17 +97,16 @@ def base_args(args: argparse.Namespace) -> SimpleNamespace:
 
 
 def session_state(client: httpx.Client, session_id: str) -> dict[str, Any]:
-    response = client.get(f"{WORKBENCH_UI_BASE}/sessions", params={"session_id": session_id})
-    response.raise_for_status()
+    response = get_with_retry(client, f"{WORKBENCH_UI_BASE}/sessions", params={"session_id": session_id})
     return response.json()
 
 
 def current_state(client: httpx.Client, session_id: str, transaction_id: str) -> dict[str, Any]:
-    response = client.get(
+    response = get_with_retry(
+        client,
         f"{WORKBENCH_UI_BASE}/flow/current-state",
         params={"session_id": session_id, "transaction_id": transaction_id},
     )
-    response.raise_for_status()
     return response.json()
 
 
